@@ -1,0 +1,20 @@
+{
+  "logLevel": "INFO",
+  "sessaoMinimaMs": 180000,
+  "pausaMaximaMs": 60000,
+  "amostraMinimaMs": 900000,
+  "logs": {
+    "maxBytesPorSegmento": 5242880,
+    "maxSegmentos": 3,
+    "flushMs": 2000
+  },
+  "jogo": {
+    "origem": "https://pokeidle.io",
+    "assetsEspecies": [
+      "/assets/creatures.json",
+      "/assets/creatures-novos.json",
+      "/assets/creatures-outland-novos.json"
+    ],
+    "assetItens": "/assets/items.json"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "PokeIdle Helper",
+  "version": "0.0.0",
+  "description": "Analisa suas hunts no PokeIdle (somente leitura): XP/h, lucro, consumíveis e dicas de tipo.",
+  "minimum_chrome_version": "111",
+  "permissions": ["storage"],
+  "host_permissions": ["https://pokeidle.io/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://pokeidle.io/app*"],
+      "js": ["capture.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://pokeidle.io/app*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

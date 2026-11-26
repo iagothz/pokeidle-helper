@@ -1,0 +1,59 @@
+{
+  "creatures": [
+    {
+      "pokeId": 4,
+      "name": "Charmander",
+      "type1": "FIRE",
+      "type2": null,
+      "huntLevel": 10,
+      "attacks": [
+        { "name": "Ember", "type": "FIRE" },
+        { "name": "Scratch", "type": "NORMAL" }
+      ]
+    },
+    {
+      "pokeId": 7,
+      "name": "Squirtle",
+      "type1": "WATER",
+      "type2": null,
+      "huntLevel": 10,
+      "attacks": [
+        { "name": "Water Gun", "type": "WATER" },
+        { "name": "Tackle", "type": "NORMAL" }
+      ]
+    },
+    {
+      "pokeId": 43,
+      "name": "Oddish",
+      "type1": "GRASS",
+      "type2": "POISON",
+      "huntLevel": 5,
+      "attacks": [
+        { "name": "Absorb", "type": "GRASS" },
+        { "name": "Acid", "type": "POISON" }
+      ]
+    },
+    {
+      "pokeId": 69,
+      "name": "Bellsprout",
+      "type1": "GRASS",
+      "type2": "POISON",
+      "huntLevel": 1,
+      "attacks": [
+        { "name": "Vine Whip", "type": "GRASS" },
+        { "name": "Poison Powder", "type": "POISON" }
+      ]
+    },
+    {
+      "pokeId": 74,
+      "name": "Geodude",
+      "type1": "ROCK",
+      "type2": "GROUND",
+      "huntLevel": 10,
+      "attacks": [
+        { "name": "Rock Throw", "type": "ROCK" },
+        { "name": "Mud Slap", "type": "GROUND" }
+      ]
+    }
+  ]
+}

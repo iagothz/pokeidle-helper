@@ -1,0 +1,97 @@
+{
+  "t": "welcome",
+  "token": "segredo-de-teste",
+  "estado": {
+    "servidorAgora": 1795730000000,
+    "eu": {
+      "id": 43244,
+      "nick": "Iagoths",
+      "email": "teste@example.com",
+      "level": 4,
+      "gold": 2714,
+      "activeId": 1,
+      "huntSlug": "bellsprout",
+      "noCentro": false,
+      "pokemons": [
+        { "id": 1, "speciesId": 4, "level": 5, "nome": "Charmander", "tipos": ["FIRE"] },
+        { "id": 2, "speciesId": 7, "level": 8, "nome": "Squirtle", "tipos": ["WATER"] }
+      ]
+    }
+  },
+  "hunts": [
+    {
+      "slug": "bellsprout",
+      "nome": "Bellsprout",
+      "nivel": 1,
+      "regiao": "kanto",
+      "especies": [{ "pokeId": 69, "pontos": 3 }]
+    },
+    {
+      "slug": "oddish",
+      "nome": "Oddish",
+      "nivel": 5,
+      "regiao": "kanto",
+      "especies": [
+        { "pokeId": 43, "pontos": 2 },
+        { "pokeId": 69, "pontos": 1 }
+      ]
+    },
+    {
+      "slug": "geodude",
+      "nome": "Geodude",
+      "nivel": 10,
+      "regiao": "kanto",
+      "especies": [{ "pokeId": 74, "pontos": 4 }]
+    },
+    { "nome": "sem slug" }
+  ],
+  "tabelaTipos": {
+    "FIRE": {
+      "GRASS": 2,
+      "BUG": 2,
+      "ICE": 2,
+      "STEEL": 2,
+      "WATER": 0.5,
+      "ROCK": 0.5,
+      "DRAGON": 0.5
+    },
+    "WATER": { "FIRE": 2, "GROUND": 2, "ROCK": 2, "GRASS": 0.5, "DRAGON": 0.5 },
+    "GRASS": {
+      "WATER": 2,
+      "GROUND": 2,
+      "ROCK": 2,
+      "FIRE": 0.5,
+      "POISON": 0.5,
+      "FLYING": 0.5,
+      "BUG": 0.5,
+      "DRAGON": 0.5,
+      "STEEL": 0.5
+    },
+    "POISON": { "GRASS": 2, "FAIRY": 2, "GROUND": 0.5, "ROCK": 0.5, "GHOST": 0.5, "STEEL": 0 },
+    "ROCK": {
+      "FIRE": 2,
+      "ICE": 2,
+      "FLYING": 2,
+      "BUG": 2,
+      "FIGHTING": 0.5,
+      "GROUND": 0.5,
+      "STEEL": 0.5
+    },
+    "GROUND": {
+      "FIRE": 2,
+      "ELECTRIC": 2,
+      "POISON": 2,
+      "ROCK": 2,
+      "STEEL": 2,
+      "GRASS": 0.5,
+      "BUG": 0.5,
+      "FLYING": 0
+    },
+    "NORMAL": { "ROCK": 0.5, "STEEL": 0.5, "GHOST": 0 }
+  },
+  "catalogoBolas": [
+    { "id": 1, "name": "Poke Ball", "priceGold": 50 },
+    { "id": 2, "name": "Great Ball", "priceGold": 300 }
+  ],
+  "itensNossos": [{ "id": 90001, "name": "Item Exclusivo", "npcPrice": 10 }]
+}

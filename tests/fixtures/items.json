@@ -1,0 +1,8 @@
+{
+  "items": [
+    { "id": 11, "name": "Potion", "category": "potion", "npcPrice": 100 },
+    { "id": 12, "name": "Revive", "category": "revive", "npcPrice": 1000 },
+    { "id": 70000, "name": "Bronze Boss Token", "category": "token", "npcPrice": 0 },
+    { "id": 3, "name": "Seed", "category": "loot", "npcPrice": 20 }
+  ]
+}

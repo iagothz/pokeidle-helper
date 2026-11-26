@@ -1,0 +1,110 @@
+[
+  {
+    "t": "batalha",
+    "em": 0,
+    "ev": [
+      { "k": "hunt", "slug": "bellsprout", "nome": "Bellsprout", "trocaLivreEm": 1795730247615 }
+    ]
+  },
+  {
+    "t": "batalha",
+    "em": 1000,
+    "ev": [
+      {
+        "k": "spawn",
+        "slot": 1,
+        "speciesId": 69,
+        "nome": "Bellsprout",
+        "looktype": 60069,
+        "level": 1,
+        "hp": 60,
+        "maxHp": 60,
+        "tipos": ["GRASS", "POISON"]
+      }
+    ]
+  },
+  {
+    "t": "batalha",
+    "em": 3000,
+    "ev": [
+      {
+        "k": "ataque",
+        "por": "jogador",
+        "slot": 12,
+        "golpe": "Overheat",
+        "tipo": "FIRE",
+        "dano": 622,
+        "ef": 2.5,
+        "stab": true,
+        "hpAlvo": 0,
+        "aoe": false
+      },
+      {
+        "k": "morte",
+        "quem": "selvagem",
+        "slot": 12,
+        "nome": "Bellsprout",
+        "xp": 8,
+        "xpTreinador": 8,
+        "xpPokemon": 8,
+        "lootBoost": false,
+        "ouro": 41,
+        "ouroLoot": 5,
+        "drops": []
+      }
+    ]
+  },
+  {
+    "t": "batalha",
+    "em": 6000,
+    "ev": [
+      {
+        "k": "spawn",
+        "slot": 2,
+        "speciesId": 69,
+        "nome": "Bellsprout",
+        "level": 1,
+        "tipos": ["GRASS", "POISON"]
+      },
+      {
+        "k": "morte",
+        "quem": "selvagem",
+        "nome": "Bellsprout",
+        "xp": 8,
+        "xpTreinador": 8,
+        "xpPokemon": 8,
+        "ouro": 41,
+        "ouroLoot": 5,
+        "drops": [{ "itemId": 70000, "nome": "Bronze Boss Token", "qtd": 1 }]
+      }
+    ]
+  },
+  {
+    "t": "batalha",
+    "em": 9000,
+    "ev": [
+      { "k": "cura", "itemId": 11 },
+      { "k": "morte", "quem": "jogador" },
+      { "k": "revive", "itemId": 12 },
+      { "k": "bola", "ballId": 1, "shiny": false, "sucesso": true },
+      { "k": "capturado", "pokemon": { "speciesId": 69, "shiny": false } }
+    ]
+  },
+  {
+    "t": "batalha",
+    "em": 200000,
+    "ev": [
+      {
+        "k": "morte",
+        "quem": "selvagem",
+        "nome": "Bellsprout",
+        "xp": 8,
+        "ouro": 41,
+        "drops": [{ "nome": "Seed", "qtd": 2 }]
+      },
+      { "k": "evento-novo-desconhecido" },
+      { "k": "morte", "quem": 123 }
+    ]
+  },
+  { "t": "batalha", "em": 230000, "ev": [{ "k": "bola", "ballId": "2", "shiny": true }] }
+]

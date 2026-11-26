@@ -1,0 +1,52 @@
+{
+  "name": "pokeidle-helper",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Extensão somente leitura que analisa as hunts do PokeIdle e dá dicas de XP, lucro e tipos.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "package": "node scripts/build.mjs && node scripts/package.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:coverage && pnpm build",
+    "test:e2e": "pnpm build && node tests/e2e/extensao.e2e.mjs"
+  },
+  "dependencies": {
+    "idb": "8.0.4",
+    "preact": "11.2.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/chrome": "0.3.8",
+    "@types/node": "26.6.11",
+    "@vitest/coverage-v8": "5.1.2",
+    "esbuild": "0.28.2",
+    "eslint": "10.15.0",
+    "fake-indexeddb": "6.2.8",
+    "fflate": "0.8.3",
+    "globals": "17.14.0",
+    "jsdom": "31.0.1",
+    "playwright-core": "1.63.0",
+    "prettier": "3.10.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.74.0",
+    "vitest": "5.1.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
