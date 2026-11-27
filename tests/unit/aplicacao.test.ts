@@ -144,6 +144,47 @@ describe('Aplicacao: logs para diagnóstico', () => {
   });
 });
 
+describe('Aplicacao: backup e importação', () => {
+  it('importa um backup, persiste só o que mudou e monta o backup completo', async () => {
+    const existente = {
+      ...novaSessao('bellsprout', 'Bellsprout', 0),
+      msAtivo: 900_000,
+      aberta: false,
+    };
+    const salvas: Sessao[] = [];
+    const { log } = logDeTeste();
+    const { especies, itens } = catalogos();
+    const app = new Aplicacao({
+      config: CONFIG_PADRAO,
+      log,
+      estado: new EstadoJogo(log),
+      repositorio: {
+        salvar: async (s) => salvas.push(s),
+        listar: async () => [existente],
+        limpar: async () => undefined,
+      },
+      especies,
+      itens,
+      versao: '0.8.0',
+      agora: () => 42,
+    });
+    await app.carregarHistorico();
+    const r = await app.importarSessoes({
+      sessoes: [
+        { ...existente, msAtivo: 100 },
+        { ...novaSessao('oddish', 'Oddish', 5), msAtivo: 300_000 },
+        { lixo: true },
+      ],
+    });
+    expect(r).toEqual({ formatoValido: true, novas: 1, atualizadas: 0, mantidas: 1, invalidas: 1 });
+    expect(salvas.map((s) => s.huntSlug)).toEqual(['oddish']);
+    const b = app.backupCompleto();
+    expect(b).toMatchObject({ formato: 'pokeidle-helper-backup', versao: '0.8.0', geradoEm: 42 });
+    expect(b.sessoes.map((s) => s.huntSlug).sort()).toEqual(['bellsprout', 'oddish']);
+    expect(await app.importarSessoes('lixo')).toMatchObject({ formatoValido: false, novas: 0 });
+  });
+});
+
 describe('Aplicacao.carregarHistorico', () => {
   it('normaliza sessões salvas por versões anteriores', async () => {
     const antiga = {

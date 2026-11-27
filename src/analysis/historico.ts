@@ -27,12 +27,14 @@ export interface Historico {
   linhas: LinhaHistorico[];
   hunts: { slug: string; nome: string }[];
   resumo: ResumoHistorico | null;
+  total: number;
 }
 
 export function montarHistorico(
   sessoes: readonly Sessao[],
   precos: Precos,
   filtroSlug?: string,
+  limite = LIMITE_HISTORICO,
 ): Historico {
   const nomes = new Map<string, string>();
   for (const s of sessoes) if (!nomes.has(s.huntSlug)) nomes.set(s.huntSlug, s.huntNome);
@@ -43,9 +45,9 @@ export function montarHistorico(
   const filtradas = sessoes
     .filter((s) => !filtroSlug || s.huntSlug === filtroSlug)
     .toSorted((a, b) => b.inicio - a.inicio);
-  if (filtradas.length === 0) return { linhas: [], hunts, resumo: null };
+  if (filtradas.length === 0) return { linhas: [], hunts, resumo: null, total: 0 };
 
-  const linhas = filtradas.slice(0, LIMITE_HISTORICO).map((s): LinhaHistorico => {
+  const linhas = filtradas.slice(0, Math.max(1, limite)).map((s): LinhaHistorico => {
     const t = taxasDe(s, precos);
     return {
       id: s.id,
@@ -63,6 +65,7 @@ export function montarHistorico(
   return {
     linhas,
     hunts,
+    total: filtradas.length,
     resumo: {
       sessoes: filtradas.length,
       msAtivo: total.msAtivo,

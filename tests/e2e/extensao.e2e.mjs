@@ -137,6 +137,18 @@ async function principal() {
 
     const resumo = `servidor recebeu ${recebidosPeloServidor.length} mensagem · jogo recebeu ${recebidosPeloJogo}/${enviadosPeloServidor}`;
 
+    await painel.getByRole('tab', { name: 'Opções' }).click();
+    await painel.getByRole('button', { name: 'Fazer backup agora' }).click();
+    await painel
+      .locator('.dica', { hasText: /Backup gravado|Não foi possível/ })
+      .waitFor({ timeout: 10000 });
+    const textoBackup = await painel.locator('.dica', { hasText: /Backup/ }).innerText();
+    assert.match(
+      textoBackup,
+      /Backup gravado em Downloads\\pokeidle-helper\\pokeidle-helper-backup\.json/,
+      `o service worker deve gravar o backup (veio: ${textoBackup})`,
+    );
+
     await painel.getByRole('tab', { name: 'Histórico' }).click();
     assert.match(
       await painel.innerText(),

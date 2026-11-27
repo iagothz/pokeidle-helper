@@ -44,6 +44,10 @@ ui/       (Shadow DOM)  ── painel Preact, atualizado no máximo a cada 250 m
 | Modelo de regime (DPS estável) em vez de simulação passo a passo | Barato para centenas de hunts e suficiente depois da calibração                    |
 | IV e qualidade médios para os selvagens                          | São sorteados no servidor; a calibração absorve o erro                             |
 
+## Backup em arquivo
+
+O script da página não pode gravar arquivos. `content/backupArquivo.ts` monta o backup (`domain/backup.ts`), divide em partes de até ~1,4 MB (limite de URL `data:`) e manda ao service worker (`background/`), que valida a origem e a mensagem e grava com `chrome.downloads` (`conflictAction: 'overwrite'`). A importação valida cada sessão com Zod e mescla por `id`, mantendo a de maior tempo ativo.
+
 ## Dados persistidos
 
 Banco IndexedDB `pokeidle-helper`, versão 1:

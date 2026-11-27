@@ -4,7 +4,7 @@ import { EstadoJogo } from '../../src/domain/estadoJogo';
 import { CONFIG_PADRAO } from '../../src/shared/config';
 import { baixarJson, montarInterface } from '../../src/ui/montar';
 import { comSinal, curto, duracao, fracao, numero } from '../../src/ui/formatar';
-import type { Sessao } from '../../src/domain/sessao';
+import { novaSessao, type Sessao } from '../../src/domain/sessao';
 import welcome from '../fixtures/welcome.json';
 import batalhas from '../fixtures/batalha-bellsprout.json';
 import { catalogos } from '../helpers/catalogos';
@@ -48,6 +48,17 @@ function acoesFalsas(preferencias: PreferenciasUi = PREFERENCIAS_PADRAO) {
     limparHistorico: vi.fn(async () => undefined),
     definirNivelLog: vi.fn(),
     nivelLog: () => 'INFO' as const,
+    fazerBackup: vi.fn(async () => ({
+      ok: true as const,
+      arquivos: ['pokeidle-helper/pokeidle-helper-backup.json'],
+    })),
+    importarBackup: vi.fn(async (_textos: string[]) => ({
+      formatoValido: true,
+      novas: 2,
+      atualizadas: 1,
+      mantidas: 0,
+      invalidas: 0,
+    })),
   };
 }
 
@@ -357,6 +368,43 @@ describe('painel', () => {
     expect(texto).toContain('Rock Stone');
   });
 
+  it('Histórico mostra todas as sessões em páginas de 50', async () => {
+    const { log } = logDeTeste();
+    const { especies, itens } = catalogos();
+    const salvas = Array.from({ length: 60 }, (_, i) => ({
+      ...novaSessao('bellsprout', 'Bellsprout', i * 1000),
+      msAtivo: 600_000,
+      abates: 10,
+      aberta: false,
+    }));
+    const app = new Aplicacao({
+      config: CONFIG_PADRAO,
+      log,
+      estado: new EstadoJogo(log),
+      repositorio: {
+        salvar: async () => undefined,
+        listar: async () => salvas,
+        limpar: async () => undefined,
+      },
+      especies,
+      itens,
+      versao: 'teste',
+    });
+    await app.carregarHistorico();
+    const ui = montarInterface(document, app, acoesFalsas());
+    desmontar = ui.desmontar;
+    clicar(ui.raiz, 'PH');
+    await esperar(10);
+    clicar(ui.raiz, 'Histórico');
+    await esperar(10);
+    expect(ui.raiz.querySelectorAll('tbody tr')).toHaveLength(50);
+    expect(ui.raiz.textContent).toMatch(/60 sessões/);
+    clicar(ui.raiz, 'Mostrar mais (10 restantes)');
+    await esperar(10);
+    expect(ui.raiz.querySelectorAll('tbody tr')).toHaveLength(60);
+    expect(ui.raiz.textContent).not.toContain('Mostrar mais');
+  });
+
   it('lista as sessões salvas na aba Histórico com filtro por hunt', async () => {
     const app = criarApp();
     const ui = montarInterface(document, app, acoesFalsas());
@@ -500,7 +548,12 @@ describe('painel', () => {
     const ui = montarInterface(
       document,
       app,
-      acoesFalsas({ posicao: { x: 12, y: 34 }, minimizado: false, aba: 'opcoes' }),
+      acoesFalsas({
+        posicao: { x: 12, y: 34 },
+        minimizado: false,
+        aba: 'opcoes',
+        backupAutomatico: true,
+      }),
     );
     desmontar = ui.desmontar;
     clicar(ui.raiz, 'PH');
@@ -508,6 +561,37 @@ describe('painel', () => {
     const painel = ui.raiz.querySelector('section.painel') as HTMLElement;
     expect(painel.style.left).toBe('12px');
     expect(ui.raiz.textContent).toContain('Exportar dados');
+  });
+
+  it('Opções: backup automático, backup agora e importar arquivos', async () => {
+    const app = criarApp();
+    const acoes = acoesFalsas();
+    const ui = montarInterface(document, app, acoes);
+    desmontar = ui.desmontar;
+    clicar(ui.raiz, 'PH');
+    await esperar(10);
+    clicar(ui.raiz, 'Opções');
+    await esperar(10);
+    const auto = ui.raiz.querySelector('input[aria-label="Backup automático"]') as HTMLInputElement;
+    expect(auto.checked).toBe(true);
+    auto.click();
+    await esperar(10);
+    expect(acoes.salvarPreferencias).toHaveBeenLastCalledWith(
+      expect.objectContaining({ backupAutomatico: false }),
+    );
+    clicar(ui.raiz, 'Fazer backup agora');
+    await esperar(10);
+    expect(acoes.fazerBackup).toHaveBeenCalled();
+    const caminho = ['Downloads', 'pokeidle-helper', 'pokeidle-helper-backup.json'].join('\\');
+    expect(ui.raiz.textContent).toContain(`Backup gravado em ${caminho}`);
+    expect(ui.raiz.textContent).toContain(`${caminho} (sobrescreve`);
+    const entrada = ui.raiz.querySelector('input[type="file"]') as HTMLInputElement;
+    const arquivo = new File(['{"sessoes":[]}'], 'backup.json', { type: 'application/json' });
+    Object.defineProperty(entrada, 'files', { value: [arquivo] });
+    entrada.dispatchEvent(new Event('change'));
+    await esperar(20);
+    expect(acoes.importarBackup).toHaveBeenCalledWith(['{"sessoes":[]}']);
+    expect(ui.raiz.textContent).toMatch(/2 novas · 1 atualizada/);
   });
 
   it('remonta sem duplicar e baixa JSON pelo shadow root', () => {

@@ -65,8 +65,8 @@ Cores: uma escala contínua do **vermelho** (ruim) ao **branco** (intermediário
 - **Time:** simulação do seu time na hunt atual (XP/h, abates/h, golpes e segundos por abate, quanto aguenta sem poção) e as melhores hunts para o pokémon que você escolher.
 - **Progresso:** metas de nível com tempo estimado, evolução do ativo, pokémons travados pelo nível do treinador e custo de refino.
 - **Economia:** captura por bola e espécie, melhor bola, shiny, pedras/h e ovo shiny da hunt atual.
-- **Histórico:** as últimas 50 sessões salvas, com filtro por hunt e resumo do período filtrado.
-- **Opções:** exportar seus dados e os logs em JSON, mudar o nível de log, limpar o histórico e conferir se o jogo manda os dados de combate do seu ativo.
+- **Histórico:** todas as sessões salvas (de 50 em 50, com "Mostrar mais"), filtro por hunt e resumo do período filtrado.
+- **Opções:** backup em arquivo (automático ao fechar cada sessão ou manual), importar backup, exportar seus dados e os logs em JSON, mudar o nível de log, limpar o histórico e conferir se o jogo manda os dados de combate do seu ativo.
 
 Sessões com menos de 3 min ativos são descartadas. O custo dos consumíveis usa o preço de NPC (`npcPrice`) e o `priceGold` das bolas, o mesmo critério do painel SESSÃO do jogo.
 
@@ -122,6 +122,12 @@ Mais detalhes em [`docs/arquitetura.md`](docs/arquitetura.md) e [`docs/protocolo
 - **Atualizar:** gere o novo `.zip`, descompacte numa pasta nova (`v0.1.1`), remova a versão antiga em `brave://extensions` e carregue a nova. Os dados ficam no IndexedDB do site e são mantidos.
 - **Rollback:** remova a versão atual e carregue a pasta da versão anterior, que você manteve guardada. As migrações do banco são aditivas e versões anteriores ignoram campos novos.
 - **Emergência:** se algo atrapalhar o jogo, desligue a extensão no toggle de `brave://extensions` e recarregue a página.
+
+## Backup em arquivo
+
+Com o backup automático ligado (padrão), cada sessão encerrada regrava `Downloadspokeidle-helperpokeidle-helper-backup.json` com **todas** as sessões. O navegador só permite gravar dentro da pasta Downloads. Para restaurar ou levar para outro PC, use **Opções → Importar backup** e escolha o arquivo (ou todas as partes, se o backup foi dividido). A importação mescla sem duplicar.
+
+A permissão `downloads` existe só para isso; o service worker grava apenas esse nome de arquivo fixo e aceita mensagens só da própria extensão.
 
 ## Privacidade
 

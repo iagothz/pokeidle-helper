@@ -25,6 +25,7 @@ import { VERSAO_JOGO_VALIDADA } from '../shared/protocolo';
 import type { Calibracao } from '../analysis/calibracao';
 import { ServicoSimulacao, type AnaliseDoPokemon } from './servicoSimulacao';
 import { dadosDeCombate, montarResumoSessao } from './resumoSessao';
+import { lerBackup, mesclarSessoes, montarBackup, type Backup } from '../domain/backup';
 import { xpDoNivel } from '../analysis/formulasJogo';
 import { montarEconomia, type Economia } from './servicoEconomia';
 import {
@@ -129,6 +130,14 @@ export interface ModeloProgresso {
   ritmo: 'sessao' | 'simulado' | 'nenhum';
 }
 
+export interface ResultadoImportacao {
+  formatoValido: boolean;
+  novas: number;
+  atualizadas: number;
+  mantidas: number;
+  invalidas: number;
+}
+
 export interface Modelo {
   status: 'aguardando-login' | 'pronto';
   time: AnaliseTime | null;
@@ -150,6 +159,7 @@ export interface DependenciasAplicacao {
   itens: CatalogoItens;
   versao: string;
   agora?: () => number;
+  aoFecharSessao?: () => void;
 }
 
 export class Aplicacao {
@@ -246,7 +256,10 @@ export class Aplicacao {
   private salvarSessao(s: Sessao) {
     this.sessoes.set(s.id, s);
     this.cacheRanking = null;
-    if (!s.aberta) this.logarResumo(s);
+    if (!s.aberta) {
+      this.logarResumo(s);
+      this.d.aoFecharSessao?.();
+    }
     this.d.repositorio.salvar(s).catch((erro: unknown) => {
       this.avisar('Falha ao salvar uma sessão no navegador. Exporte seus dados por segurança.');
       this.log.error('Falha ao persistir sessão', { id: s.id, ...erroParaCtx(erro) });
@@ -589,8 +602,30 @@ export class Aplicacao {
     };
   }
 
-  historico(filtroSlug?: string): Historico {
-    return montarHistorico([...this.sessoes.values()], this.precos(), filtroSlug);
+  historico(filtroSlug?: string, limite?: number): Historico {
+    return montarHistorico([...this.sessoes.values()], this.precos(), filtroSlug, limite);
+  }
+
+  async importarSessoes(json: unknown): Promise<ResultadoImportacao> {
+    const leitura = lerBackup(json);
+    if (!leitura.formatoValido)
+      return { formatoValido: false, novas: 0, atualizadas: 0, mantidas: 0, invalidas: 0 };
+    const antes = new Map(this.sessoes);
+    const r = mesclarSessoes(this.sessoes, leitura.sessoes);
+    const mudaram = [...this.sessoes.values()].filter((s) => antes.get(s.id) !== s);
+    for (const s of mudaram) await this.d.repositorio.salvar(s);
+    this.cacheRanking = null;
+    this.log.info('Backup importado', { ...r, invalidas: leitura.invalidas });
+    this.notificar();
+    return { formatoValido: true, ...r, invalidas: leitura.invalidas };
+  }
+
+  backupCompleto(): Backup {
+    return montarBackup(
+      [...this.sessoes.values()].toSorted((a, b) => a.inicio - b.inicio),
+      this.d.versao,
+      (this.d.agora ?? Date.now)(),
+    );
   }
 
   exportarDados(): { versao: string; exportadoEm: number; sessoes: Sessao[] } {

@@ -13,6 +13,7 @@ describe('lerPreferencias', () => {
       posicao: { x: 10, y: 20 },
       minimizado: true,
       aba: 'historico',
+      backupAutomatico: true,
     });
   });
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Aplicacao, Modelo } from '../content/aplicacao';
+import type { RespostaBackup } from '../background/gravadorBackup';
+import type { Aplicacao, Modelo, ResultadoImportacao } from '../content/aplicacao';
 import { ordenar, type Criterio, type LinhaRanking } from '../analysis/ranking';
 import type { BonusAtivo } from '../analysis/multiplicadores';
 import type { NivelLog } from '../shared/logger';
@@ -22,6 +23,90 @@ export interface AcoesPainel {
   nivelLog(): NivelLog;
   preferencias(): PreferenciasUi;
   salvarPreferencias(p: PreferenciasUi): void;
+  fazerBackup(): Promise<RespostaBackup>;
+  importarBackup(textos: string[]): Promise<ResultadoImportacao>;
+}
+
+function textoImportacao(r: ResultadoImportacao): string {
+  if (!r.formatoValido) return 'Arquivo não reconhecido como backup do helper.';
+  const partes = [
+    `${numero(r.novas)} novas`,
+    `${numero(r.atualizadas)} ${r.atualizadas === 1 ? 'atualizada' : 'atualizadas'}`,
+    `${numero(r.mantidas)} já existiam`,
+  ];
+  if (r.invalidas) partes.push(`${numero(r.invalidas)} inválidas ignoradas`);
+  return `Importado: ${partes.join(' · ')}.`;
+}
+
+const BARRA = String.fromCharCode(92);
+
+function SecaoBackup({
+  acoes,
+  automatico,
+  definirAutomatico,
+}: {
+  acoes: AcoesPainel;
+  automatico: boolean;
+  definirAutomatico: (v: boolean) => void;
+}) {
+  const [mensagem, definirMensagem] = useState<string | null>(null);
+  const backupAgora = async () => {
+    const r = await acoes.fazerBackup();
+    definirMensagem(
+      r.ok
+        ? `Backup gravado em Downloads${BARRA}${r.arquivos.map((a) => a.replaceAll('/', BARRA)).join(', ')}`
+        : `Não foi possível gravar o backup: ${r.erro}`,
+    );
+  };
+  const importar = async (arquivos: FileList | File[] | null) => {
+    const lista = [...(arquivos ?? [])];
+    if (lista.length === 0) return;
+    try {
+      const textos = await Promise.all(lista.map((a) => a.text()));
+      definirMensagem(textoImportacao(await acoes.importarBackup(textos)));
+    } catch (erro) {
+      definirMensagem(
+        `Falha ao ler o arquivo: ${erro instanceof Error ? erro.message : String(erro)}`,
+      );
+    }
+  };
+  return (
+    <>
+      <h2 class="secao">Backup em arquivo</h2>
+      <div class="controles">
+        <label>
+          <input
+            type="checkbox"
+            aria-label="Backup automático"
+            checked={automatico}
+            onChange={(e) => definirAutomatico((e.target as HTMLInputElement).checked)}
+          />
+          Backup automático ao fechar cada sessão
+        </label>
+      </div>
+      <div class="controles">
+        <button class="acao" onClick={() => void backupAgora()}>
+          Fazer backup agora
+        </button>
+        <label class="acao">
+          Importar backup
+          <input
+            type="file"
+            accept=".json,application/json"
+            multiple
+            hidden
+            onChange={(e) => void importar((e.target as HTMLInputElement).files)}
+          />
+        </label>
+      </div>
+      <p class="muted">
+        Grava todas as sessões em{' '}
+        {['Downloads', 'pokeidle-helper', 'pokeidle-helper-backup.json'].join(BARRA)} (sobrescreve o
+        anterior). Importar mescla sem duplicar.
+      </p>
+      {mensagem ? <p class="dica">{mensagem}</p> : null}
+    </>
+  );
 }
 
 type Aba = AbaPainel;
@@ -35,6 +120,8 @@ const ABAS: readonly (readonly [Aba, string])[] = [
   ['historico', 'Histórico'],
   ['opcoes', 'Opções'],
 ];
+
+const PAGINA_HISTORICO = 50;
 
 const formatoData = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -194,7 +281,17 @@ function AbaHunts({ modelo }: { modelo: Modelo }) {
   );
 }
 
-function AbaOpcoes({ modelo, acoes }: { modelo: Modelo; acoes: AcoesPainel }) {
+function AbaOpcoes({
+  modelo,
+  acoes,
+  backupAutomatico,
+  definirBackupAutomatico,
+}: {
+  modelo: Modelo;
+  acoes: AcoesPainel;
+  backupAutomatico: boolean;
+  definirBackupAutomatico: (v: boolean) => void;
+}) {
   const [confirmando, definirConfirmando] = useState(false);
   const [nivel, definirNivel] = useState<NivelLog>(acoes.nivelLog());
   const d = modelo.diagnostico;
@@ -208,6 +305,11 @@ function AbaOpcoes({ modelo, acoes }: { modelo: Modelo; acoes: AcoesPainel }) {
           Exportar logs
         </button>
       </div>
+      <SecaoBackup
+        acoes={acoes}
+        automatico={backupAutomatico}
+        definirAutomatico={definirBackupAutomatico}
+      />
       <div class="controles">
         <label>
           Nível de log
@@ -288,7 +390,9 @@ function AbaOpcoes({ modelo, acoes }: { modelo: Modelo; acoes: AcoesPainel }) {
 
 function AbaHistorico({ app }: { app: Aplicacao }) {
   const [filtro, definirFiltro] = useState('');
-  const h = app.historico(filtro || undefined);
+  const [limite, definirLimite] = useState(PAGINA_HISTORICO);
+  const h = app.historico(filtro || undefined, limite);
+  const restantes = h.total - h.linhas.length;
   const xpsHistorico = h.linhas.map((l) => l.xpPokemonH);
   if (h.hunts.length === 0)
     return (
@@ -302,7 +406,10 @@ function AbaHistorico({ app }: { app: Aplicacao }) {
         <select
           aria-label="Filtrar por hunt"
           value={filtro}
-          onChange={(e) => definirFiltro((e.target as HTMLSelectElement).value)}
+          onChange={(e) => {
+            definirFiltro((e.target as HTMLSelectElement).value);
+            definirLimite(PAGINA_HISTORICO);
+          }}
         >
           <option value="">Todas as hunts</option>
           {h.hunts.map((hunt) => (
@@ -363,6 +470,11 @@ function AbaHistorico({ app }: { app: Aplicacao }) {
           ))}
         </tbody>
       </table>
+      {restantes > 0 ? (
+        <button class="acao mostrar-mais" onClick={() => definirLimite(limite + PAGINA_HISTORICO)}>
+          Mostrar mais ({numero(restantes)} restantes)
+        </button>
+      ) : null}
     </>
   );
 }
@@ -373,6 +485,7 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
   const [aberto, definirAberto] = useState(false);
   const [aba, definirAbaEstado] = useState<Aba>(inicial.aba);
   const [minimizado, definirMinimizadoEstado] = useState(inicial.minimizado);
+  const [backupAutomatico, definirBackupAutomaticoEstado] = useState(inicial.backupAutomatico);
   const preferencias = useRef<PreferenciasUi>(inicial);
   const secao = useRef<HTMLElement>(null);
   const salvar = (parcial: Partial<PreferenciasUi>) => {
@@ -472,7 +585,17 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
                 {aba === 'progresso' ? <AbaProgresso modelo={modelo} /> : null}
                 {aba === 'economia' ? <AbaEconomia modelo={modelo} /> : null}
                 {aba === 'historico' ? <AbaHistorico app={app} /> : null}
-                {aba === 'opcoes' ? <AbaOpcoes modelo={modelo} acoes={acoes} /> : null}
+                {aba === 'opcoes' ? (
+                  <AbaOpcoes
+                    modelo={modelo}
+                    acoes={acoes}
+                    backupAutomatico={backupAutomatico}
+                    definirBackupAutomatico={(v) => {
+                      definirBackupAutomaticoEstado(v);
+                      salvar({ backupAutomatico: v });
+                    }}
+                  />
+                ) : null}
               </div>
             </>
           )}

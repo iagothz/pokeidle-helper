@@ -10,6 +10,8 @@ import { DestinoConsole, GerenciadorLog, erroParaCtx, type NivelLog } from '../s
 import { baixarJson, montarInterface } from '../ui/montar';
 import { Aplicacao } from './aplicacao';
 import { carregarCatalogos } from './carregarCatalogos';
+import { enviarBackup, importarTextos, type MensagemBackup } from './backupArquivo';
+import type { RespostaBackup } from '../background/gravadorBackup';
 import type { EnvelopeValido } from '../bridge/receptor';
 import type { Sessao } from '../domain/sessao';
 
@@ -47,6 +49,28 @@ async function carregarPreferencias(): Promise<PreferenciasUi> {
     log.warn('Não foi possível ler as preferências do painel', erroParaCtx(erro));
     return lerPreferencias(undefined);
   }
+}
+
+let preferenciasAtuais: PreferenciasUi = lerPreferencias(undefined);
+let backupAgendado: number | null = null;
+const ESPERA_BACKUP_MS = 3_000;
+
+function enviarAoServiceWorker(m: MensagemBackup): Promise<RespostaBackup> {
+  return chrome.runtime.sendMessage(m) as Promise<RespostaBackup>;
+}
+
+function fazerBackup(app: Aplicacao): Promise<RespostaBackup> {
+  return enviarBackup(app.backupCompleto(), enviarAoServiceWorker, log.filho('backup'));
+}
+
+let appParaBackup: Aplicacao | null = null;
+
+function agendarBackup(): void {
+  if (backupAgendado !== null) window.clearTimeout(backupAgendado);
+  backupAgendado = window.setTimeout(() => {
+    backupAgendado = null;
+    if (appParaBackup) void fazerBackup(appParaBackup);
+  }, ESPERA_BACKUP_MS);
 }
 
 function salvarPreferencias(p: PreferenciasUi): void {
@@ -118,11 +142,16 @@ async function iniciar() {
     especies,
     itens,
     versao,
+    aoFecharSessao: () => {
+      if (preferenciasAtuais.backupAutomatico) agendarBackup();
+    },
   });
   if (!repositorio)
     app.avisar('O navegador bloqueou o armazenamento local; o histórico só vale até fechar a aba.');
+  appParaBackup = app;
   await app.carregarHistorico();
   const preferencias = await carregarPreferencias();
+  preferenciasAtuais = preferencias;
 
   entregar = (e) => app.receber(e);
   for (const e of pendentes.splice(0)) app.receber(e);
@@ -163,7 +192,13 @@ async function iniciar() {
       },
       nivelLog: () => nivelAtual,
       preferencias: () => preferencias,
-      salvarPreferencias,
+      salvarPreferencias: (p: PreferenciasUi) => {
+        preferenciasAtuais = p;
+        salvarPreferencias(p);
+      },
+      fazerBackup: () => fazerBackup(app),
+      importarBackup: (textos: string[]) =>
+        importarTextos(textos, (json) => app.importarSessoes(json)),
     });
     log.info('Helper iniciado', { versao });
   });

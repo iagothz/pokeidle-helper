@@ -48,11 +48,15 @@ describe('montarHistorico', () => {
     expect(h.resumo?.lucroH).toBeCloseTo((1000 - 200) / 3, 6);
   });
 
-  it('sem sessões não tem resumo e limita a quantidade de linhas', () => {
-    expect(montarHistorico([], precos)).toEqual({ linhas: [], hunts: [], resumo: null });
+  it('sem sessões não tem resumo; pagina as linhas e informa o total', () => {
+    expect(montarHistorico([], precos)).toEqual({ linhas: [], hunts: [], resumo: null, total: 0 });
     const muitas = Array.from({ length: LIMITE_HISTORICO + 5 }, (_, i) => sessao('a', i));
     const h = montarHistorico(muitas, precos);
     expect(h.linhas).toHaveLength(LIMITE_HISTORICO);
+    expect(h.total).toBe(LIMITE_HISTORICO + 5);
     expect(h.resumo?.sessoes).toBe(LIMITE_HISTORICO + 5);
+    expect(montarHistorico(muitas, precos, undefined, 1_000).linhas).toHaveLength(
+      LIMITE_HISTORICO + 5,
+    );
   });
 });

@@ -32,6 +32,11 @@ const alvos = [
     entryPoints: [path.join(raiz, 'src/content/index.tsx')],
     outfile: path.join(saida, 'content.js'),
   },
+  {
+    ...comum,
+    entryPoints: [path.join(raiz, 'src/background/index.ts')],
+    outfile: path.join(saida, 'background.js'),
+  },
 ];
 
 async function gerarManifesto() {

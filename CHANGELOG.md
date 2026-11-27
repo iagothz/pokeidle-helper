@@ -5,6 +5,19 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.8.0] - 2026-11-26
+
+### Adicionado
+
+- Backup automático em arquivo: ao fechar cada sessão, todas as sessões são gravadas em `Downloadspokeidle-helperpokeidle-helper-backup.json` (sobrescreve; acima de ~1,4 MB divide em `-parte-N.json`). Interruptor e botão "Fazer backup agora" em Opções.
+- Importar backup (um ou vários arquivos, inclusive a exportação manual): valida cada sessão, descarta as inválidas e mescla sem duplicar, mantendo a versão mais completa.
+- Service worker (`background.js`) que grava os arquivos com `chrome.downloads`; aceita só mensagens da própria extensão e usa nomes de arquivo fixos.
+
+### Alterado
+
+- Histórico mostra todas as sessões em páginas de 50 ("Mostrar mais").
+- Nova permissão: `downloads`.
+
 ## [0.7.0] - 2026-11-26
 
 ### Adicionado

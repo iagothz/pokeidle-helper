@@ -21,12 +21,14 @@ export interface PreferenciasUi {
   posicao: Posicao | null;
   minimizado: boolean;
   aba: AbaPainel;
+  backupAutomatico: boolean;
 }
 
 export const PREFERENCIAS_PADRAO: Readonly<PreferenciasUi> = Object.freeze({
   posicao: null,
   minimizado: false,
   aba: 'sessao',
+  backupAutomatico: true,
 });
 
 const coordenada = z.number().finite();
@@ -34,12 +36,18 @@ const esquema = z.object({
   posicao: z.object({ x: coordenada, y: coordenada }).nullable().catch(null),
   minimizado: z.boolean().catch(false),
   aba: z.enum(ABAS_PAINEL).catch('sessao'),
+  backupAutomatico: z.boolean().catch(true),
 });
 
 export function lerPreferencias(bruto: unknown): PreferenciasUi {
   const res = esquema.safeParse(typeof bruto === 'object' && bruto !== null ? bruto : {});
   return res.success
-    ? { posicao: res.data.posicao ?? null, minimizado: res.data.minimizado, aba: res.data.aba }
+    ? {
+        posicao: res.data.posicao ?? null,
+        minimizado: res.data.minimizado,
+        aba: res.data.aba,
+        backupAutomatico: res.data.backupAutomatico,
+      }
     : { ...PREFERENCIAS_PADRAO };
 }
 

@@ -25,3 +25,6 @@ Faça com o Brave Shields **ligado**.
 - [ ] Na aba **Economia**, comparar a chance da bola com a tabela de captura da ficha da espécie no jogo.
 - [ ] Na aba **Progresso**, digitar um nível-alvo e conferir o XP que falta com a ficha do jogo.
 - [ ] Capturar com venda automática ligada e ver "Vendas auto/h" subir na aba **Sessão**.
+- [ ] Em **Opções**, clicar em "Fazer backup agora" e conferir `Downloadspokeidle-helperpokeidle-helper-backup.json` com todas as sessões.
+- [ ] Fechar uma sessão (trocar de hunt) e ver o arquivo de backup atualizado.
+- [ ] Limpar o histórico, importar o backup e ver as sessões de volta no **Histórico**.

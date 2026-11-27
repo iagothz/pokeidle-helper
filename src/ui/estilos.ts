@@ -78,6 +78,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 label { display: inline-flex; gap: 4px; align-items: center; }
 select, .campo-nivel { background: var(--fundo-2); color: var(--texto); border: 1px solid var(--linha); border-radius: 6px; padding: 4px 6px; }
 .campo-nivel { width: 90px; }
+.mostrar-mais { width: 100%; margin-top: 8px; }
 .perigo-btn { border-color: var(--ruim); color: var(--ruim); }
 dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 8px 0 0; }
 dt { color: var(--texto-2); }
