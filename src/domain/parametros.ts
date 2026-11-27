@@ -3,6 +3,10 @@ export interface ParametrosCombate {
   multHpSelvagem: number;
   multDanoSelvagem: number;
   multDanoExtra: number;
+  tipoSazonal: string | null;
+  escudoSazonal: boolean;
+  deslocamentoPorAbateS: number;
+  esperaPorOndaS: number;
 }
 
 export const PARAMETROS_COMBATE_PADRAO: Readonly<ParametrosCombate> = Object.freeze({
@@ -10,6 +14,10 @@ export const PARAMETROS_COMBATE_PADRAO: Readonly<ParametrosCombate> = Object.fre
   multHpSelvagem: 5,
   multDanoSelvagem: 1.8,
   multDanoExtra: 1,
+  tipoSazonal: null,
+  escudoSazonal: false,
+  deslocamentoPorAbateS: 2.6,
+  esperaPorOndaS: 2.6,
 });
 
 export interface ParametrosCaptura {

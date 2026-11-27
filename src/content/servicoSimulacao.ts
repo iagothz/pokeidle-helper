@@ -1,9 +1,10 @@
 import { atacanteDe } from '../analysis/atacante';
-import { calibrar, type Calibracao } from '../analysis/calibracao';
+import { calibrar, calibrarComponentes, type Calibracao } from '../analysis/calibracao';
 import { ouroPorAbate, xpDoNivel } from '../analysis/formulasJogo';
 import type { Multiplicadores } from '../analysis/multiplicadores';
 import { simularHunt, type ResultadoSimulacao } from '../analysis/simulador';
 import type { CatalogoEspecies } from '../domain/catalogo';
+import type { ParametrosCombate } from '../domain/parametros';
 import type { EstadoJogo, Jogador } from '../domain/estadoJogo';
 import type { Hunt, PokemonJogador } from '../domain/schemas';
 import type { Sessao } from '../domain/sessao';
@@ -33,39 +34,69 @@ export class ServicoSimulacao {
     private readonly especies: CatalogoEspecies,
   ) {}
 
-  simuladorPara(pk: PokemonJogador): Simulador | null {
+  simuladorPara(pk: PokemonJogador, ajustes?: Partial<ParametrosCombate>): Simulador | null {
     const atacante = atacanteDe(pk, this.especies);
     if (!atacante) return null;
+    const parametros = { ...this.estado.parametrosCombate, ...ajustes };
     return (hunt) =>
-      simularHunt(
-        atacante,
-        hunt,
-        this.especies,
-        this.estado.tabelaTipos,
-        this.estado.parametrosCombate,
-      );
+      simularHunt(atacante, hunt, this.especies, this.estado.tabelaTipos, parametros);
   }
 
   calibracao(sessoes: readonly Sessao[]): Calibracao | null {
+    const casos = this.casosDeCalibracao(sessoes);
+    const amostrasComponentes = casos.flatMap(({ sessao, pokemon, hunt }) => {
+      const sim = this.simuladorPara(pokemon)?.(hunt);
+      if (!sim) return [];
+      return [
+        {
+          abatesReais: sessao.abates,
+          msAtivo: sessao.msAtivo,
+          golpesReais: sessao.golpesDados ?? 0,
+          golpesSimulados: sim.acoesPorAbateMedio * sessao.abates,
+          deslocamentoMs: sessao.fases?.deslocamentoMs ?? 0,
+          esperaMs: sessao.fases?.esperaMs ?? 0,
+          ondas: sessao.fases?.ondas ?? 0,
+        },
+      ];
+    });
+    const componentes = calibrarComponentes(amostrasComponentes);
+    const ajustes: Partial<ParametrosCombate> = {
+      ...(componentes?.fatorDano ? { multDanoExtra: componentes.fatorDano } : {}),
+      ...(componentes?.deslocamentoPorAbateS !== null &&
+      componentes?.deslocamentoPorAbateS !== undefined
+        ? { deslocamentoPorAbateS: componentes.deslocamentoPorAbateS }
+        : {}),
+      ...(componentes?.esperaPorOndaS !== null && componentes?.esperaPorOndaS !== undefined
+        ? { esperaPorOndaS: componentes.esperaPorOndaS }
+        : {}),
+    };
+    const residual = calibrar(
+      casos.flatMap(({ sessao, pokemon, hunt }) => {
+        const sim = this.simuladorPara(pokemon, ajustes)?.(hunt);
+        return sim
+          ? [{ abatesReais: sessao.abates, msAtivo: sessao.msAtivo, abatesHSimulado: sim.abatesH }]
+          : [];
+      }),
+    );
+    return residual ? { ...residual, componentes, ajustes } : null;
+  }
+
+  private casosDeCalibracao(sessoes: readonly Sessao[]) {
     const pokemons = this.estado.jogador()?.pokemons ?? [];
-    const amostras = sessoes.flatMap((s) => {
-      const hunt = this.estado.huntPorSlug(s.huntSlug);
-      const registro = s.pokemon;
+    return sessoes.flatMap((sessao) => {
+      const hunt = this.estado.huntPorSlug(sessao.huntSlug);
+      const registro = sessao.pokemon;
       if (!registro || !hunt) return [];
       const atual = pokemons.find((p) => String(p.id) === registro.id);
       const mesmoNivel = atual?.level === registro.level;
-      const pk: PokemonJogador = {
+      const pokemon: PokemonJogador = {
         ...(atual ?? { id: registro.id }),
         ...(registro.speciesId !== undefined ? { speciesId: registro.speciesId } : {}),
         ...(registro.level !== undefined ? { level: registro.level } : {}),
         ...(mesmoNivel ? {} : { stats: undefined, maxHp: undefined }),
       };
-      const sim = this.simuladorPara(pk)?.(hunt);
-      return sim
-        ? [{ abatesReais: s.abates, msAtivo: s.msAtivo, abatesHSimulado: sim.abatesH }]
-        : [];
+      return [{ sessao, pokemon, hunt }];
     });
-    return calibrar(amostras);
   }
 
   melhoresHunts(
@@ -76,7 +107,7 @@ export class ServicoSimulacao {
     calibracao: Calibracao | null,
     mult: Multiplicadores,
   ): AnaliseDeHunt[] {
-    const simular = this.simuladorPara(pokemon);
+    const simular = this.simuladorPara(pokemon, calibracao?.ajustes);
     if (!simular) return [];
     return hunts
       .flatMap((hunt) => {
@@ -105,7 +136,7 @@ export class ServicoSimulacao {
   ): AnaliseDoPokemon[] {
     return time
       .flatMap((pokemon) => {
-        const sim = this.simuladorPara(pokemon)?.(hunt);
+        const sim = this.simuladorPara(pokemon, calibracao?.ajustes)?.(hunt);
         return sim ? [analisar(pokemon, hunt, sim, calibracao, mult)] : [];
       })
       .toSorted((a, b) => b.xpPokemonH - a.xpPokemonH);

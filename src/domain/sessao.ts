@@ -1,7 +1,8 @@
 import type { Logger } from '../shared/logger';
+import { FASES_ZERADAS, MedidorFases, type Fases } from './medidorFases';
 import { idPositivo, lerEvento, type Evento } from './schemas';
 
-export const VERSAO_SESSAO = 3;
+export const VERSAO_SESSAO = 4;
 export const EF_SUPER_EFETIVO = 2;
 const ENTRADA_BOSS_PADRAO = { itemId: 70000, qtd: 1 };
 
@@ -33,6 +34,9 @@ export interface Sessao {
   xpPerdido: number;
   fugas: number;
   vendasAuto: number;
+  golpesDados: number;
+  danoCausado: number;
+  fases: Fases;
   pokemon?: PokemonDaSessao;
   aberta: boolean;
 }
@@ -100,6 +104,9 @@ export function novaSessao(slug: string, nome: string, inicio: number): Sessao {
     xpPerdido: 0,
     fugas: 0,
     vendasAuto: 0,
+    golpesDados: 0,
+    danoCausado: 0,
+    fases: { ...FASES_ZERADAS },
     aberta: true,
   };
 }
@@ -116,6 +123,9 @@ export function normalizarSessao(s: Sessao): Sessao {
     xpPerdido: s.xpPerdido ?? 0,
     fugas: s.fugas ?? 0,
     vendasAuto: s.vendasAuto ?? 0,
+    golpesDados: s.golpesDados ?? 0,
+    danoCausado: s.danoCausado ?? 0,
+    fases: s.fases ?? { ...FASES_ZERADAS },
   };
 }
 
@@ -124,12 +134,14 @@ export class RastreadorSessao {
   private ultimoEventoEm: number | null = null;
   private readonly agora: () => number;
   private invalidos = 0;
+  private readonly medidor: MedidorFases;
 
   constructor(
     private readonly opcoes: OpcoesRastreador,
     private readonly log: Logger,
   ) {
     this.agora = opcoes.agora ?? Date.now;
+    this.medidor = new MedidorFases(opcoes.pausaMaximaMs);
   }
 
   get sessaoAtual(): Readonly<Sessao> | null {
@@ -146,6 +158,7 @@ export class RastreadorSessao {
     if (!slug) return;
     this.atual = novaSessao(slug, nome ?? this.opcoes.nomeDaHunt(slug) ?? slug, em);
     this.ultimoEventoEm = null;
+    this.medidor.reiniciar();
     this.log.info('Sessão iniciada', { hunt: slug });
   }
 
@@ -167,6 +180,8 @@ export class RastreadorSessao {
       if (!this.atual) continue;
       if (EVENTOS_DE_COMBATE.has(ev.k)) this.registrarAtividade(em);
       this.contar(this.atual, ev);
+      this.medidor.registrar(ev, em);
+      this.atual.fases = this.medidor.resultado();
     }
   }
 
@@ -227,7 +242,11 @@ export class RastreadorSessao {
         break;
       }
       case 'ataque':
-        if (ev.por === 'jogador') break;
+        if (ev.por === 'jogador') {
+          s.golpesDados++;
+          s.danoCausado += Math.max(0, ev.dano ?? 0);
+          break;
+        }
         s.golpesRecebidos++;
         s.danoRecebido += Math.max(0, ev.dano ?? 0);
         if ((ev.ef ?? 0) >= EF_SUPER_EFETIVO) s.golpesSuperEfetivos++;
@@ -265,6 +284,8 @@ export class RastreadorSessao {
   encerrar(motivo: string, em = this.agora()): void {
     const s = this.atual;
     if (!s) return;
+    this.medidor.fechar(Math.min(em, s.fim + this.opcoes.pausaMaximaMs));
+    s.fases = this.medidor.resultado();
     this.atual = null;
     this.ultimoEventoEm = null;
     s.fim = Math.max(s.fim, Math.min(em, s.fim + this.opcoes.pausaMaximaMs));

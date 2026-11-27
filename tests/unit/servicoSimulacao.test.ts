@@ -44,6 +44,26 @@ describe('ServicoSimulacao', () => {
     expect(c?.fator).toBeCloseTo(0.5, 2);
   });
 
+  it('calibra dano, deslocamento e espera pelos componentes medidos', () => {
+    const { servico, estado } = criar();
+    const hunt = estado.huntPorSlug('geodude')!;
+    const sim = servico.simuladorPara(estado.pokemonAtivo()!)!(hunt)!;
+    const abates = 100;
+    const sessao: Sessao = {
+      ...novaSessao('geodude', 'Geodude', 0),
+      msAtivo: 3_600_000,
+      abates,
+      golpesDados: Math.round((sim.acoesPorAbateMedio * abates) / 4),
+      fases: { lutaMs: 1_000_000, deslocamentoMs: 150_000, esperaMs: 80_000, ondas: 40 },
+      pokemon: { id: '1', speciesId: 4, level: 5 },
+    };
+    const c = servico.calibracao([sessao])!;
+    expect(c.componentes?.fatorDano).toBeCloseTo(4, 1);
+    expect(c.ajustes).toMatchObject({ deslocamentoPorAbateS: 1.5, esperaPorOndaS: 2 });
+    const ajustado = servico.simuladorPara(estado.pokemonAtivo()!, c.ajustes)!(hunt)!;
+    expect(ajustado.acoesPorAbateMedio).toBeLessThan(sim.acoesPorAbateMedio);
+  });
+
   it('analisa o time na hunt, do melhor para o pior XP/h', () => {
     const { servico, estado } = criar();
     const hunt = estado.huntPorSlug('geodude')!;

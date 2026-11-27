@@ -3,7 +3,7 @@ import { Aplicacao } from '../../src/content/aplicacao';
 import { EstadoJogo } from '../../src/domain/estadoJogo';
 import { CONFIG_PADRAO } from '../../src/shared/config';
 import { baixarJson, montarInterface } from '../../src/ui/montar';
-import { duracao, fracao, numero } from '../../src/ui/formatar';
+import { comSinal, curto, duracao, fracao, numero } from '../../src/ui/formatar';
 import type { Sessao } from '../../src/domain/sessao';
 import welcome from '../fixtures/welcome.json';
 import batalhas from '../fixtures/batalha-bellsprout.json';
@@ -72,6 +72,16 @@ describe('formatação', () => {
     expect(fracao(Number.NaN)).toBe('—');
     expect(duracao(3_725_000)).toBe('1h 02min');
     expect(duracao(65_000)).toBe('1min 05s');
+    expect(duracao(21_000)).toBe('21s');
+    expect(duracao(16 * 60_000)).toBe('16min');
+    expect(duracao((147 * 60 + 58) * 60_000)).toBe('6d 03h');
+    expect(curto(9_999)).toBe('9.999');
+    expect(curto(11_520)).toMatch(/^11,5\s?mil$/);
+    expect(curto(-655_000)).toMatch(/^-655\s?mil$/);
+    expect(curto(null)).toBe('—');
+    expect(comSinal(2_300)).toBe('+2.300');
+    expect(comSinal(-12_400)).toMatch(/^-12,4\s?mil$/);
+    expect(comSinal(0)).toBe('0');
   });
 });
 
@@ -301,6 +311,31 @@ describe('painel', () => {
     alvo.dispatchEvent(new Event('input'));
     await esperar(10);
     expect(texto()).toMatch(/faltam\s*[\d.]+ XP/);
+  });
+
+  it('mostra onde vai o tempo: luta, deslocamento e espera de onda', async () => {
+    const app = criarApp();
+    const ui = montarInterface(document, app, acoesFalsas());
+    desmontar = ui.desmontar;
+    clicar(ui.raiz, 'PH');
+    await esperar(10);
+    app.receber(env(welcome, 0));
+    const seq: [unknown, number][] = [
+      [{ k: 'spawn', speciesId: 69 }, 1_000],
+      [{ k: 'ataque', por: 'jogador', dano: 60 }, 3_000],
+      [{ k: 'ataque', por: 'jogador', dano: 40 }, 4_000],
+      [{ k: 'morte', quem: 'selvagem', xp: 8, ouro: 41, drops: [] }, 6_000],
+      [{ k: 'spawn', speciesId: 69 }, 8_000],
+    ];
+    for (const [ev, em] of seq) app.receber(env({ t: 'batalha', ev: [ev] }, em));
+    await esperar();
+    const texto = ui.raiz.textContent ?? '';
+    expect(texto).toContain('Onde vai o tempo');
+    expect(texto).toMatch(/Lutando\s*43%/);
+    expect(texto).toMatch(/Andando\s*29%/);
+    expect(texto).toMatch(/Esperando onda\s*29%/);
+    expect(texto).toMatch(/2 golpes por abate/);
+    expect(ui.raiz.querySelector('.barra-fases')).not.toBeNull();
   });
 
   it('aba Economia: captura por bola, melhor bola, shiny e pedras', async () => {

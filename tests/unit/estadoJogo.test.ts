@@ -56,7 +56,7 @@ describe('EstadoJogo', () => {
   it('lê dados de combate dos pokémons e parâmetros de combate e captura do welcome', () => {
     const { log } = logDeTeste();
     const estado = new EstadoJogo(log);
-    expect(estado.parametrosCombate).toEqual({
+    expect(estado.parametrosCombate).toMatchObject({
       ampliacaoHunt: 1.5,
       multHpSelvagem: 5,
       multDanoSelvagem: 1.8,
@@ -111,6 +111,23 @@ describe('EstadoJogo', () => {
       tmFisico: true,
       tmAoe: true,
     });
+  });
+
+  it('inclui o dia sazonal e o Shield do Novato nos parâmetros de combate', () => {
+    const { log } = logDeTeste();
+    const estado = new EstadoJogo(log);
+    estado.aplicarMensagem({
+      t: 'welcome',
+      estado: {
+        nick: 'a',
+        level: 209,
+        diaSazonal: { tipo: 'FIRE', fim: 123 },
+        loja: { alvoAtrasados: 1296 },
+      },
+    });
+    expect(estado.parametrosCombate).toMatchObject({ tipoSazonal: 'FIRE', escudoSazonal: true });
+    estado.aplicarMensagem({ t: 'estado', estado: { level: 1300, diaSazonal: { tipo: 'XYZ' } } });
+    expect(estado.parametrosCombate).toMatchObject({ tipoSazonal: null, escudoSazonal: false });
   });
 
   it('aplica deltas de estado e notifica ouvintes', () => {

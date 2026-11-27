@@ -98,3 +98,19 @@ Eventos só de raid (`queda`, `onda`, `gmax`, `marco`, `fora`) não são usados.
 - **Loot:** desde 15/10/2026 os selvagens só largam pedras de evolução (`shared/loot-pedras.mjs`): uma por tipo distinto (Ghost e Dark dão a mesma), com 0,2/0,35/0,5% conforme o estágio. Os drops especiais não são vendidos ao NPC.
 - **Fragmento de ovo shiny** (`shared/ovo-shiny.mjs`): fora do Outland, a partir do nível 5000, `1/150000 · (1 + 0,04·(degrau−1))`, 32 degraus até 160 300; 10 fragmentos fazem um ovo.
 - **Curva de XP** (`shared/boost-atrasados.mjs`): `xpTotal(L) = round(50/3 · (L³ − 6L² + 17L − 12))`. Pokémon só luta com nível ≤ treinador + 5 (`shared/pokemon-nivel-treinador.mjs`). Refino: próximo passo `500·(3n²+3n+1)`, total `500·n³`.
+
+## Fases da hunt (medidas pelo helper)
+
+O helper não recebe posições (`campo` é descartado). As fases saem dos horários dos eventos de `batalha`:
+
+| Fase           | Início                                  | Fim                                   |
+| -------------- | --------------------------------------- | ------------------------------------- |
+| Lutando        | seu `ataque` (`por: 'jogador'`)         | `morte` do selvagem                   |
+| Andando        | `morte` com selvagens vivos, ou `spawn` | seu próximo `ataque`                  |
+| Esperando onda | `morte` que zera os vivos               | próximo `spawn` (conta uma onda nova) |
+
+Intervalos acima da pausa máxima (60 s) são descartados. O dano de cada golpe seu vem em `ataque.dano`.
+
+## Dia sazonal (`shared/dia-sazonal.mjs`)
+
+`estado.diaSazonal.tipo` traz o tipo do dia. Dano = base × (atacante do tipo ? 2 : 1) ÷ (defensor do tipo ? 4 : 1). Com o Shield do Novato (`level < loja.alvoAtrasados`), os selvagens do tipo não recebem o bônus contra você.

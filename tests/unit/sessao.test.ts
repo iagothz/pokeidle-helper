@@ -157,6 +157,20 @@ describe('RastreadorSessao', () => {
     expect(r.sessaoAtual).toMatchObject({ desmaios: 2, xpPerdido: 150, fugas: 1, capturas: 1 });
   });
 
+  it('mede fases, golpes dados e dano causado pelo seu pokémon', () => {
+    const { r } = criar();
+    r.definirHunt('bellsprout', 'Bellsprout', 0);
+    r.processarEventos([{ k: 'spawn', speciesId: 69 }], 0);
+    r.processarEventos([{ k: 'ataque', por: 'jogador', dano: 300, ef: 2 }], 2_000);
+    r.processarEventos([{ k: 'ataque', por: 'jogador', dano: 200, ef: 1 }], 3_000);
+    r.processarEventos([{ k: 'morte', quem: 'selvagem', xp: 8, ouro: 41, drops: [] }], 4_000);
+    r.processarEventos([{ k: 'spawn', speciesId: 69 }], 7_000);
+    const s = r.sessaoAtual!;
+    expect(s.golpesDados).toBe(2);
+    expect(s.danoCausado).toBe(500);
+    expect(s.fases).toEqual({ lutaMs: 2_000, deslocamentoMs: 2_000, esperaMs: 3_000, ondas: 2 });
+  });
+
   it('soma o gold das capturas vendidas automaticamente', () => {
     const { r } = criar();
     r.definirHunt('bellsprout', 'Bellsprout', 0);
@@ -219,6 +233,9 @@ describe('normalizarSessao', () => {
       desmaios: undefined,
       xpPerdido: undefined,
       fugas: undefined,
+      golpesDados: undefined,
+      danoCausado: undefined,
+      fases: undefined,
     };
     const s = normalizarSessao(antiga as unknown as Sessao);
     expect(s).toMatchObject({
@@ -230,6 +247,9 @@ describe('normalizarSessao', () => {
       desmaios: 0,
       xpPerdido: 0,
       fugas: 0,
+      golpesDados: 0,
+      danoCausado: 0,
+      fases: { lutaMs: 0, deslocamentoMs: 0, esperaMs: 0, ondas: 0 },
       huntSlug: 'bellsprout',
     });
   });

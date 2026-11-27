@@ -117,6 +117,44 @@ describe('simularHunt', () => {
     expect(z.porEspecie[0]!.dps).toBeGreaterThan(base.porEspecie[0]!.dps);
   });
 
+  it('dia sazonal: seu pokémon do tipo bate ×2; selvagem do tipo apanha ÷4 sem escudo', () => {
+    const base = simularHunt(charmander(5), geodude, especies, tabela, PARAMETROS_COMBATE_PADRAO)!;
+    const fogo = simularHunt(charmander(5), geodude, especies, tabela, {
+      ...PARAMETROS_COMBATE_PADRAO,
+      tipoSazonal: 'FIRE',
+    })!;
+    expect(fogo.porEspecie[0]!.dps).toBeCloseTo(base.porEspecie[0]!.dps * 2, 6);
+    expect(fogo.porEspecie[0]!.danoRecebidoPorSeg).toBeCloseTo(
+      base.porEspecie[0]!.danoRecebidoPorSeg / 4,
+      6,
+    );
+    const pedra = simularHunt(charmander(5), geodude, especies, tabela, {
+      ...PARAMETROS_COMBATE_PADRAO,
+      tipoSazonal: 'ROCK',
+    })!;
+    expect(pedra.porEspecie[0]!.dps).toBeCloseTo(base.porEspecie[0]!.dps / 4, 6);
+    expect(pedra.porEspecie[0]!.danoRecebidoPorSeg).toBeCloseTo(
+      base.porEspecie[0]!.danoRecebidoPorSeg * 2,
+      6,
+    );
+    const comEscudo = simularHunt(charmander(5), geodude, especies, tabela, {
+      ...PARAMETROS_COMBATE_PADRAO,
+      tipoSazonal: 'ROCK',
+      escudoSazonal: true,
+    })!;
+    expect(comEscudo.porEspecie[0]!.dps).toBeCloseTo(base.porEspecie[0]!.dps, 6);
+  });
+
+  it('usa deslocamento e espera de onda medidos quando informados', () => {
+    const r = simularHunt(charmander(100, { ivs: 1 }), bellsprout, especies, tabela, {
+      ...PARAMETROS_COMBATE_PADRAO,
+      deslocamentoPorAbateS: 1,
+      esperaPorOndaS: 3,
+    })!;
+    const e = r.porEspecie[0]!;
+    expect(e.tAbateS).toBeCloseTo(e.tLutaS + 1 + 3 / 3, 10);
+  });
+
   it('usa os stats prontos do servidor quando existem', () => {
     const r1 = simularHunt(charmander(5), geodude, especies, tabela, PARAMETROS_COMBATE_PADRAO)!;
     const r2 = simularHunt(

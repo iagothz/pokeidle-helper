@@ -1,6 +1,7 @@
 import type { EnvelopeValido } from '../bridge/receptor';
 import type { CatalogoEspecies, CatalogoItens } from '../domain/catalogo';
 import type { EstadoJogo } from '../domain/estadoJogo';
+import type { Fases } from '../domain/medidorFases';
 import { RastreadorSessao, normalizarSessao, type Sessao } from '../domain/sessao';
 import type { PokemonJogador } from '../domain/schemas';
 import {
@@ -16,13 +17,14 @@ import { montarHistorico, type Historico } from '../analysis/historico';
 import { previsaoDeNivel, type PrevisaoNivel } from '../analysis/metas';
 import { calcularMultiplicadores } from '../analysis/multiplicadores';
 import { montarRanking, type ResultadoRanking } from '../analysis/ranking';
-import { taxasDe, type Precos, type Taxas } from '../analysis/taxas';
+import { agregar, taxasDe, type Precos, type Taxas } from '../analysis/taxas';
 import type { Config } from '../shared/config';
 import type { Logger } from '../shared/logger';
 import { erroParaCtx } from '../shared/logger';
 import { VERSAO_JOGO_VALIDADA } from '../shared/protocolo';
 import type { Calibracao } from '../analysis/calibracao';
 import { ServicoSimulacao, type AnaliseDoPokemon } from './servicoSimulacao';
+import { dadosDeCombate, montarResumoSessao } from './resumoSessao';
 import { xpDoNivel } from '../analysis/formulasJogo';
 import { montarEconomia, type Economia } from './servicoEconomia';
 import {
@@ -54,6 +56,18 @@ export interface ItemDrop {
   aCadaAbates: number | null;
 }
 
+export interface ValoresHunt {
+  xp: number;
+  lucro: number;
+  gold: number;
+  abates: number;
+}
+
+export interface ReferenciaHunt {
+  outras: { xp: number[]; lucro: number[]; gold: number[]; abates: number[] };
+  historico: ValoresHunt | null;
+}
+
 export interface ModeloSessao {
   huntSlug: string;
   huntNome: string;
@@ -69,6 +83,10 @@ export interface ModeloSessao {
   autonomia: Autonomia;
   tipo: AvaliacaoTipo | null;
   dano: AvaliacaoDano;
+  referencia: ReferenciaHunt;
+  fases: Fases;
+  golpesDados: number;
+  danoCausado: number;
   sugestao: PokemonJogador | null;
   ativo: PokemonJogador | null;
 }
@@ -144,6 +162,7 @@ export class Aplicacao {
   private cacheRanking: ResultadoRanking | null = null;
   private versaoJogo: string | null = null;
   private cacheTime: AnaliseTime | null = null;
+  private readonly ativosLogados = new Set<string>();
   readonly simulacao: ServicoSimulacao;
   private readonly log: Logger;
 
@@ -210,6 +229,13 @@ export class Aplicacao {
   private registrarPokemonAtivo() {
     const pk = this.d.estado.pokemonAtivo();
     if (!pk) return;
+    if (!this.ativosLogados.has(String(pk.id))) {
+      this.ativosLogados.add(String(pk.id));
+      this.log.info(
+        'Dados de combate do ativo',
+        dadosDeCombate(pk, this.d.especies.obter(pk.speciesId)),
+      );
+    }
     this.rastreador.registrarPokemon({
       id: String(pk.id),
       ...(pk.speciesId !== undefined ? { speciesId: pk.speciesId } : {}),
@@ -220,10 +246,46 @@ export class Aplicacao {
   private salvarSessao(s: Sessao) {
     this.sessoes.set(s.id, s);
     this.cacheRanking = null;
+    if (!s.aberta) this.logarResumo(s);
     this.d.repositorio.salvar(s).catch((erro: unknown) => {
       this.avisar('Falha ao salvar uma sessão no navegador. Exporte seus dados por segurança.');
       this.log.error('Falha ao persistir sessão', { id: s.id, ...erroParaCtx(erro) });
     });
+  }
+
+  private logarResumo(s: Sessao) {
+    try {
+      const estado = this.d.estado;
+      const hunt = estado.huntPorSlug(s.huntSlug);
+      const agora = (this.d.agora ?? Date.now)();
+      const calibracao = this.simulacao.calibracao([...this.sessoes.values()]);
+      const pk = s.pokemon
+        ? {
+            ...(estado.jogador()?.pokemons.find((p) => String(p.id) === s.pokemon?.id) ?? {
+              id: s.pokemon.id,
+            }),
+            ...(s.pokemon.speciesId !== undefined ? { speciesId: s.pokemon.speciesId } : {}),
+            ...(s.pokemon.level !== undefined ? { level: s.pokemon.level } : {}),
+          }
+        : null;
+      const simulado =
+        pk && hunt ? (this.simulacao.simuladorPara(pk, calibracao?.ajustes)?.(hunt) ?? null) : null;
+      this.log.info(
+        'Resumo da sessão',
+        montarResumoSessao({
+          sessao: s,
+          huntNivel: hunt?.nivel ?? null,
+          especie: this.d.especies.obter(s.pokemon?.speciesId),
+          taxas: taxasDe(s, this.precos()),
+          simulado,
+          calibracao,
+          parametros: estado.parametrosCombate,
+          multiplicadores: calcularMultiplicadores({ agora, ...estado.bonus(agora) }),
+        }),
+      );
+    } catch (erro) {
+      this.log.error('Falha ao montar o resumo da sessão', erroParaCtx(erro));
+    }
   }
 
   checkpoint(): void {
@@ -271,6 +333,28 @@ export class Aplicacao {
       this.cacheRanking?.calibracao ?? this.simulacao.calibracao([...this.sessoes.values()]),
       calcularMultiplicadores({ agora, ...estado.bonus(agora) }),
     );
+  }
+
+  private referenciaDaHunt(slug: string, idAtual: string, precos: Precos): ReferenciaHunt {
+    const nivelTreinador = this.d.estado.jogador()?.level;
+    const outras = (this.cacheRanking?.linhas ?? []).filter(
+      (l) => l.slug !== slug && (nivelTreinador === undefined || l.nivel <= nivelTreinador),
+    );
+    const anteriores = [...this.sessoes.values()].filter(
+      (s) => s.huntSlug === slug && s.id !== idAtual && s.msAtivo > 0,
+    );
+    const t = anteriores.length ? taxasDe(agregar(anteriores), precos) : null;
+    return {
+      outras: {
+        xp: outras.map((l) => l.xpH),
+        lucro: outras.map((l) => l.lucroH ?? l.goldH),
+        gold: outras.map((l) => l.goldH),
+        abates: outras.map((l) => l.abatesH),
+      },
+      historico: t
+        ? { xp: t.xpPokemonH, lucro: t.lucroLiquidoH, gold: t.goldH, abates: t.abatesH }
+        : null,
+    };
   }
 
   private montarEconomiaAtual(): Economia | null {
@@ -351,7 +435,7 @@ export class Aplicacao {
     const sessoes = [...this.sessoes.values()];
     const multiplicadores = calcularMultiplicadores({ agora, ...estado.bonus(agora) });
     const calibracao = this.simulacao.calibracao(sessoes);
-    const simular = ativo ? this.simulacao.simuladorPara(ativo) : null;
+    const simular = ativo ? this.simulacao.simuladorPara(ativo, calibracao?.ajustes) : null;
     this.cacheRanking = montarRanking({
       hunts: estado.hunts,
       sessoes,
@@ -457,6 +541,10 @@ export class Aplicacao {
         }),
         tipo,
         dano: avaliarDanoRecebido(atual),
+        referencia: this.referenciaDaHunt(atual.huntSlug, atual.id, precos),
+        fases: atual.fases,
+        golpesDados: atual.golpesDados,
+        danoCausado: atual.danoCausado,
         sugestao: this.cacheTime?.linhas.length
           ? melhorSimulado && ativo && String(melhorSimulado.id) !== String(ativo.id)
             ? melhorSimulado

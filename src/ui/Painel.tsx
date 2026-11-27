@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Aplicacao, Modelo, ModeloSessao } from '../content/aplicacao';
+import type { Aplicacao, Modelo } from '../content/aplicacao';
 import { ordenar, type Criterio, type LinhaRanking } from '../analysis/ranking';
-import type { Autonomia } from '../analysis/autonomia';
-import type { Classificacao } from '../analysis/dicasTipo';
-import type { PrevisaoNivel } from '../analysis/metas';
 import type { BonusAtivo } from '../analysis/multiplicadores';
 import type { NivelLog } from '../shared/logger';
 import { NIVEIS } from '../shared/logger';
 import type { AbaPainel, PreferenciasUi } from '../shared/preferencias';
 import { AbaEconomia } from './AbaEconomia';
+import { AbaSessao } from './AbaSessao';
 import { AbaProgresso } from './AbaProgresso';
 import { AbaTime } from './AbaTime';
 import { usarArraste } from './arraste';
-import { duracao, fracao, numero } from './formatar';
+import { comSinal, curto, duracao, fracao, numero } from './formatar';
+import { notaGeral, notaSinal, notaPercentil } from './tons';
+import { Barra, Metrica, Ponto, SeloTipo, Valor } from './visual';
 
 export interface AcoesPainel {
   exportarDados(): void;
@@ -51,13 +51,6 @@ const ROTULO_FONTE: Record<LinhaRanking['fonte'], string> = {
   teorico: 'teto teórico',
 };
 
-const ROTULO_TIPO: Record<Classificacao, string> = {
-  vantagem: 'vantagem',
-  neutro: 'neutro',
-  desvantagem: 'desvantagem',
-  desconhecido: '?',
-};
-
 function usarModelo(app: Aplicacao, intervaloMs = 1000): Modelo {
   const [modelo, definir] = useState(() => app.modelo());
   useEffect(() => {
@@ -80,227 +73,6 @@ function usarModelo(app: Aplicacao, intervaloMs = 1000): Modelo {
   return modelo;
 }
 
-function Metrica({ rotulo, valor, classe }: { rotulo: string; valor: string; classe?: string }) {
-  return (
-    <div class="metrica">
-      <span>{rotulo}</span>
-      <strong class={classe}>{valor}</strong>
-    </div>
-  );
-}
-
-function SeloTipo({ c, perigo }: { c: Classificacao; perigo?: boolean }) {
-  return (
-    <>
-      <span class={`selo ${c}`}>{ROTULO_TIPO[c]}</span>
-      {perigo ? <span class="selo perigo"> apanha forte</span> : null}
-    </>
-  );
-}
-
-function PainelAutonomia({ autonomia }: { autonomia: Autonomia }) {
-  if (autonomia.linhas.length === 0) return null;
-  const limite = autonomia.limitante;
-  return (
-    <>
-      <h2 class="secao">Autonomia</h2>
-      {limite ? (
-        <p class={limite.msRestante !== null && limite.msRestante < 15 * 60_000 ? 'aviso' : ''}>
-          Dá para ficar ~{duracao(limite.msRestante ?? 0)} no ritmo atual (acaba primeiro:{' '}
-          {limite.nome}).
-        </p>
-      ) : (
-        <p class="muted">Medindo o consumo: precisa de 5 min ativos e 3 usos de cada item.</p>
-      )}
-      <table>
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th class="num">Estoque</th>
-            <th class="num">Uso/h</th>
-            <th class="num">Acaba em</th>
-          </tr>
-        </thead>
-        <tbody>
-          {autonomia.linhas.map((l) => (
-            <tr key={`${l.categoria}-${l.id}`}>
-              <td>{l.nome}</td>
-              <td class="num">{numero(l.estoque)}</td>
-              <td class="num">{l.suficiente ? numero(Math.round(l.porHora)) : '—'}</td>
-              <td class="num">{l.msRestante !== null ? duracao(l.msRestante) : 'medindo'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
-  );
-}
-
-function LinhaMeta({ rotulo, p }: { rotulo: string; p: PrevisaoNivel }) {
-  return (
-    <tr>
-      <td>
-        {rotulo}
-        {p.nivelAlvo !== null ? ` nv ${numero(p.nivelAlvo)}` : ''}
-      </td>
-      <td class="num">{numero(Math.floor(p.progresso * 100))}%</td>
-      <td class="num">{numero(p.faltam)}</td>
-      <td class="num">{p.msAte !== null ? `~${duracao(p.msAte)}` : '—'}</td>
-    </tr>
-  );
-}
-
-function PainelMetas({ metas, nomeAtivo }: { metas: ModeloSessao['metas']; nomeAtivo: string }) {
-  if (!metas.treinador && !metas.pokemon) return null;
-  return (
-    <>
-      <h2 class="secao">Próximo nível</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Alvo</th>
-            <th class="num">Feito</th>
-            <th class="num">Faltam</th>
-            <th class="num">No ritmo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {metas.treinador ? <LinhaMeta rotulo="Treinador" p={metas.treinador} /> : null}
-          {metas.pokemon ? <LinhaMeta rotulo={nomeAtivo} p={metas.pokemon} /> : null}
-        </tbody>
-      </table>
-    </>
-  );
-}
-
-function AbaSessao({ sessao }: { sessao: ModeloSessao | null }) {
-  if (!sessao)
-    return <p class="muted">Nenhuma hunt ativa. Entre numa hunt para começar a medir.</p>;
-  const t = sessao.taxas;
-  const nomeAtivo = sessao.ativo?.nome ?? sessao.ativo?.nick ?? 'seu pokémon ativo';
-  return (
-    <>
-      <p>
-        <strong>{sessao.huntNome}</strong>{' '}
-        <span class="muted">
-          · {duracao(t.msAtivo)} ativo · {numero(sessao.abates)} abates
-        </span>
-      </p>
-      {sessao.tipo && sessao.tipo.classificacao === 'desvantagem' ? (
-        <div class="aviso">
-          {nomeAtivo} está em desvantagem de tipo aqui (dano médio ×{fracao(sessao.tipo.ofensiva)}).
-        </div>
-      ) : null}
-      {sessao.dano.suficiente ? (
-        <div class={sessao.dano.perigo ? 'aviso' : 'dica'}>
-          {numero(Math.round(sessao.dano.fracaoSuperEfetivos * 100))}% dos golpes recebidos foram
-          super efetivos ({numero(sessao.dano.golpes)} golpes, dano médio{' '}
-          {numero(Math.round(sessao.dano.danoMedio))}).
-          {sessao.dano.perigo ? ' Atenção às poções.' : ''}
-        </div>
-      ) : sessao.tipo?.perigo ? (
-        <div class="aviso">
-          Os pokémon desta hunt acertam {nomeAtivo} com super efetivo; atenção às poções.
-        </div>
-      ) : null}
-      {sessao.sugestao ? (
-        <div class="dica">
-          Dica: {sessao.sugestao.nome ?? sessao.sugestao.nick ?? 'outro pokémon'} do seu time rende
-          mais nesta hunt.
-        </div>
-      ) : null}
-      <div class="grade">
-        <Metrica rotulo="XP pokémon/h" valor={numero(t.xpPokemonH)} />
-        <Metrica rotulo="XP treinador/h" valor={numero(t.xpTreinadorH)} />
-        <Metrica rotulo="Gold/h" valor={numero(t.goldH)} />
-        <Metrica rotulo="Abates/min" valor={fracao(t.abatesMin)} />
-        <Metrica rotulo="Consumíveis/h" valor={numero(t.custoH)} />
-        <Metrica
-          rotulo="Lucro líquido/h"
-          valor={numero(t.lucroLiquidoH)}
-          classe={t.lucroLiquidoH >= 0 ? 'positivo' : 'negativo'}
-        />
-        <Metrica rotulo="Vendas auto/h" valor={numero(t.vendasAutoH)} />
-        <Metrica
-          rotulo="Lucro real/h"
-          valor={numero(t.lucroRealH)}
-          classe={t.lucroRealH >= 0 ? 'positivo' : 'negativo'}
-        />
-        <Metrica rotulo="Desmaios" valor={numero(sessao.desmaios)} />
-        <Metrica rotulo="XP perdido" valor={numero(sessao.xpPerdido)} />
-        <Metrica
-          rotulo="Captura"
-          valor={
-            sessao.capturas + sessao.fugas > 0
-              ? `${numero(Math.round((sessao.capturas / (sessao.capturas + sessao.fugas)) * 100))}%`
-              : '—'
-          }
-        />
-      </div>
-      <PainelMetas
-        metas={sessao.metas}
-        nomeAtivo={sessao.ativo?.nome ?? sessao.ativo?.nick ?? 'Pokémon ativo'}
-      />
-      {sessao.tipo ? (
-        <p>
-          Tipo do ativo nesta hunt:{' '}
-          <SeloTipo c={sessao.tipo.classificacao} perigo={sessao.tipo.perigo} />
-        </p>
-      ) : null}
-      {sessao.consumidos.length ? (
-        <table>
-          <thead>
-            <tr>
-              <th>Consumível</th>
-              <th class="num">Qtd</th>
-              <th class="num">Custo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessao.consumidos.map((c) => (
-              <tr key={c.nome}>
-                <td>{c.nome}</td>
-                <td class="num">{numero(c.qtd)}</td>
-                <td class="num">{numero(c.custo)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <p class="muted">Nenhum consumível usado nesta sessão.</p>
-      )}
-      <PainelAutonomia autonomia={sessao.autonomia} />
-      {sessao.drops.length ? (
-        <>
-          <table>
-            <thead>
-              <tr>
-                <th>Drop</th>
-                <th class="num">Qtd</th>
-                <th class="num">1 a cada</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sessao.drops.map((d) => (
-                <tr key={d.nome}>
-                  <td>{d.nome}</td>
-                  <td class="num">{numero(d.qtd)}</td>
-                  <td class="num">
-                    {d.aCadaAbates !== null ? `${numero(Math.round(d.aCadaAbates))} abates` : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p class="muted">
-            Desde 15/10/2026 o NPC não compra esses itens: só valem no Mercado da comunidade.
-          </p>
-        </>
-      ) : null}
-    </>
-  );
-}
-
 function textoBonus(b: BonusAtivo): string {
   return 'mult' in b ? `${b.rotulo} ×${fracao(b.mult)}` : `${b.rotulo} +${fracao(b.pct)}%`;
 }
@@ -312,6 +84,9 @@ function AbaHunts({ modelo }: { modelo: Modelo }) {
   if (!ranking) return <p class="muted">O ranking aparece depois do login no jogo.</p>;
   const limite = ocultarAltas && modelo.nivelAtivo !== null ? modelo.nivelAtivo : undefined;
   const linhas = ordenar(ranking.linhas, criterio, limite).slice(0, 60);
+  const valorDe = (l: LinhaRanking) => (criterio === 'xp' ? l.xpH : (l.lucroH ?? l.goldH));
+  const valores = linhas.map(valorDe);
+  const maior = Math.max(1, ...valores);
   return (
     <>
       <div class="controles">
@@ -392,12 +167,18 @@ function AbaHunts({ modelo }: { modelo: Modelo }) {
                   </span>
                 ) : null}
               </td>
-              <td class="num">
-                {criterio === 'xp'
-                  ? numero(l.xpH)
-                  : l.lucroH !== null
-                    ? numero(l.lucroH)
-                    : `${numero(l.goldH)}*`}
+              <td class="num celula-valor">
+                <Valor
+                  nota={valorDe(l) < 0 ? 0 : notaPercentil(valorDe(l), valores)}
+                  titulo={numero(valorDe(l))}
+                >
+                  {curto(valorDe(l))}
+                  {criterio === 'lucro' && l.lucroH === null ? '*' : ''}
+                </Valor>
+                <Barra
+                  fracao={valorDe(l) / maior}
+                  nota={valorDe(l) < 0 ? 0 : notaPercentil(valorDe(l), valores)}
+                />
               </td>
               <td>
                 <SeloTipo c={l.tipo.classificacao} perigo={l.tipo.perigo} />
@@ -508,6 +289,7 @@ function AbaOpcoes({ modelo, acoes }: { modelo: Modelo; acoes: AcoesPainel }) {
 function AbaHistorico({ app }: { app: Aplicacao }) {
   const [filtro, definirFiltro] = useState('');
   const h = app.historico(filtro || undefined);
+  const xpsHistorico = h.linhas.map((l) => l.xpPokemonH);
   if (h.hunts.length === 0)
     return (
       <p class="muted">
@@ -536,13 +318,13 @@ function AbaHistorico({ app }: { app: Aplicacao }) {
             rotulo={h.resumo.sessoes === 1 ? '1 sessão' : `${numero(h.resumo.sessoes)} sessões`}
             valor={duracao(h.resumo.msAtivo)}
           />
-          <Metrica rotulo="XP pokémon/h" valor={numero(h.resumo.xpPokemonH)} />
+          <Metrica rotulo="XP pokémon/h" valor={curto(h.resumo.xpPokemonH)} />
           <Metrica
             rotulo="Lucro líquido/h"
-            valor={numero(h.resumo.lucroH)}
-            classe={h.resumo.lucroH >= 0 ? 'positivo' : 'negativo'}
+            valor={comSinal(h.resumo.lucroH)}
+            nota={notaSinal(h.resumo.lucroH)}
           />
-          <Metrica rotulo="Vendas auto/h" valor={numero(h.resumo.vendasAutoH)} />
+          <Metrica rotulo="Vendas auto/h" valor={curto(h.resumo.vendasAutoH)} />
         </div>
       ) : null}
       <table>
@@ -564,8 +346,19 @@ function AbaHistorico({ app }: { app: Aplicacao }) {
                   {l.desmaios ? ` · ${numero(l.desmaios)} desmaios` : ''}
                 </span>
               </td>
-              <td class="num">{numero(l.xpPokemonH)}</td>
-              <td class={`num ${l.lucroH >= 0 ? 'positivo' : 'negativo'}`}>{numero(l.lucroH)}</td>
+              <td class="num">
+                <Valor
+                  nota={notaPercentil(l.xpPokemonH, xpsHistorico)}
+                  titulo={numero(l.xpPokemonH)}
+                >
+                  {curto(l.xpPokemonH)}
+                </Valor>
+              </td>
+              <td class="num">
+                <Valor nota={notaSinal(l.lucroH)} titulo={numero(l.lucroH)}>
+                  {comSinal(l.lucroH)}
+                </Valor>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -599,6 +392,17 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
     modelo.avisos.length > 0 ||
     modelo.sessao?.tipo?.classificacao === 'desvantagem' ||
     modelo.sessao?.dano.perigo === true;
+  const s = modelo.sessao;
+  const estadoGeral = notaGeral(
+    s
+      ? {
+          lucroRealH: s.taxas.lucroRealH,
+          autonomiaMs: s.autonomia.limitante?.msRestante ?? null,
+          desmaios: s.desmaios,
+          perigo: s.dano.perigo,
+        }
+      : null,
+  );
   const estiloPosicao = posicao
     ? { left: `${posicao.x}px`, top: `${posicao.y}px`, right: 'auto', bottom: 'auto' }
     : undefined;
@@ -611,6 +415,7 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
         onClick={() => definirAberto(!aberto)}
       >
         PH
+        <Ponto nota={estadoGeral} />
       </button>
       {aberto ? (
         <section

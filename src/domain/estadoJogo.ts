@@ -56,6 +56,27 @@ export interface BonusJogador {
 
 type Ouvinte = () => void;
 
+const TIPOS_SAZONAIS = new Set([
+  'NORMAL',
+  'FIRE',
+  'WATER',
+  'GRASS',
+  'ELECTRIC',
+  'ICE',
+  'FIGHTING',
+  'POISON',
+  'GROUND',
+  'FLYING',
+  'PSYCHIC',
+  'BUG',
+  'ROCK',
+  'GHOST',
+  'DRAGON',
+  'DARK',
+  'STEEL',
+  'FAIRY',
+]);
+
 const ehObjeto = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -116,7 +137,18 @@ export class EstadoJogo {
     return this._itensJogo;
   }
   get parametrosCombate(): ParametrosCombate {
-    return this._parametrosCombate;
+    const sazonal = ehObjeto(this.bruto.diaSazonal) ? this.bruto.diaSazonal.tipo : undefined;
+    const tipoSazonal =
+      typeof sazonal === 'string' && TIPOS_SAZONAIS.has(sazonal.toUpperCase())
+        ? sazonal.toUpperCase()
+        : null;
+    const nivel = Number(this.bruto.level);
+    const alvo = ehObjeto(this.bruto.loja) ? Number(this.bruto.loja.alvoAtrasados) : NaN;
+    return {
+      ...this._parametrosCombate,
+      tipoSazonal,
+      escudoSazonal: Number.isFinite(alvo) && alvo > 1 && Number.isFinite(nivel) && nivel < alvo,
+    };
   }
   get captura(): ParametrosCaptura {
     return this._captura;

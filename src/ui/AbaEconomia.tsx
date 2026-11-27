@@ -1,6 +1,7 @@
 import type { Modelo } from '../content/aplicacao';
 import type { Economia, FonteRitmo } from '../content/servicoEconomia';
 import { duracao, fracao, numero } from './formatar';
+import { Valor } from './visual';
 
 const TEXTO_RITMO: Record<FonteRitmo, string> = {
   sessao: 'abates/h medidos nesta sessão',
@@ -47,7 +48,19 @@ function TabelaCaptura({ e }: { e: Economia }) {
                     <span class="muted"> (sem estoque)</span>
                   )}
                 </td>
-                <td class="num">{pct(b.chance)}</td>
+                <td class="num">
+                  <Valor
+                    nota={
+                      !e.bolasNoInventario.has(b.bolaId)
+                        ? null
+                        : b.bolaId === c.melhorBolaId
+                          ? 1
+                          : 0.5
+                    }
+                  >
+                    {pct(b.chance)}
+                  </Valor>
+                </td>
                 <td class="num">{numero(Math.round(b.bolasPorCaptura))}</td>
                 <td class="num">{numero(b.custoPorCaptura)}</td>
               </tr>

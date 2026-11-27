@@ -3,6 +3,7 @@ import type { Modelo, ModeloProgresso } from '../content/aplicacao';
 import { etaParaNivel, xpTotalDoNivel } from '../analysis/progressao';
 import type { PokemonJogador } from '../domain/schemas';
 import { duracao, numero } from './formatar';
+import { Valor } from './visual';
 
 const nomeDe = (p: PokemonJogador) => p.nome ?? p.nick ?? `#${String(p.id)}`;
 const tempo = (ms: number | null) =>
@@ -107,7 +108,7 @@ export function AbaProgresso({ modelo }: { modelo: Modelo }) {
                   </span>
                 </td>
                 <td class="num">
-                  {numero(t.faltamXp)} XP
+                  <Valor nota={0}>{numero(t.faltamXp)} XP</Valor>
                   <br />
                   <span class="muted">{tempo(t.msAte)}</span>
                 </td>

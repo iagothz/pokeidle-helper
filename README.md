@@ -51,9 +51,11 @@ O helper precisa estar ativo **antes** do login, porque os dados de hunts chegam
 
 ## Uso
 
+Cores: uma escala contínua do **vermelho** (ruim) ao **branco** (intermediário) e ao **verde** (bom); quanto mais forte a cor, mais longe do meio. Na hunt atual, XP/h, lucro, gold e abates são coloridos pela posição entre as outras hunts liberadas pelo nível do seu treinador, ajustada pela sua média histórica na mesma hunt; o motivo aparece embaixo do número. A bolinha no botão **PH** resume a sessão (vermelha com lucro negativo, desmaios, muito dano super efetivo ou consumíveis acabando).
+
 - **PH** abre e fecha o painel. O botão fica laranja quando há um aviso, desvantagem de tipo ou muitos golpes super efetivos recebidos.
 - Arraste o painel pelo cabeçalho e use **–** / **+** para minimizar e restaurar. Posição, estado e última aba ficam salvos.
-- **Sessão:** métricas da hunt atual, desmaios, XP perdido, taxa de captura, próximo nível do treinador e do ativo, autonomia de consumíveis e drops. Só o tempo ativo conta: pausas maiores que 60 s entre eventos de batalha são descontadas.
+- **Sessão:** métricas da hunt atual, onde vai o tempo (lutando, andando, esperando onda) e golpes reais por abate, desmaios, XP perdido, taxa de captura, próximo nível do treinador e do ativo, autonomia de consumíveis e drops. Só o tempo ativo conta: pausas maiores que 60 s entre eventos de batalha são descontadas.
 - **Hunts:** o selo de cada linha diz de onde vem o número:
   - `real`: média das suas sessões, com pelo menos 15 min acumulados;
   - `pouca amostra`: real, mas com menos de 15 min;
@@ -93,6 +95,7 @@ Nenhum segredo, token ou credencial é usado ou guardado.
 | `pnpm typecheck`                   | TypeScript em modo strict                                                                                     |
 | `pnpm test` / `pnpm test:coverage` | Testes unitários e de integração (Vitest)                                                                     |
 | `pnpm test:e2e`                    | Carrega a extensão num Chromium real contra um jogo simulado (defina `CHROME_PATH` para usar outro navegador) |
+| `pnpm prints <pasta>`              | Tira prints de cada aba do painel num Chromium real contra o jogo simulado (defina `CHROME_PATH`)             |
 | `pnpm check`                       | Lint, formatação, tipos, testes com cobertura e build                                                         |
 
 O CI (GitHub Actions) roda tudo isso a cada push e PR e anexa o `.zip` como artefato.
@@ -127,7 +130,7 @@ Tudo fica no seu navegador: as sessões e os logs no IndexedDB de `pokeidle.io` 
 ## Limitações conhecidas
 
 - O formato das mensagens foi conferido na versão 1.492.0 do jogo. Quando o jogo é atualizado, o painel avisa que a versão mudou e mostra a nova em **Opções → Versão do jogo**. Mudanças no protocolo podem fazer o helper ignorar dados; isso aparece em **Opções → Eventos ignorados** e nos logs.
-- O simulador usa as fórmulas do código compartilhado do jogo, mas os IVs e a qualidade dos selvagens são sorteados no servidor: o helper usa a média (IV 16,5 e qualidade ≈ 1,18) e corrige pela calibração com as suas sessões (mediana de real ÷ simulado). Prey, bestiário, dia sazonal e pódio de ginásio não entram no dano. Com TM de área, supõe metade da onda atingida por golpe.
+- O simulador usa as fórmulas do código compartilhado do jogo, mas os IVs e a qualidade dos selvagens são sorteados no servidor: o helper usa a média (IV 16,5 e qualidade ≈ 1,18) e corrige pela calibração com as suas sessões (mediana de real ÷ simulado). O dia sazonal entra no dano; Prey, bestiário e pódio de ginásio não. A calibração usa os golpes reais por abate e os tempos medidos de deslocamento e espera de onda. Com TM de área, supõe metade da onda atingida por golpe.
 - As estimativas aplicam os bônus ativos **agora** (VIP, boosts, guild, evento de farm); as linhas `real` ficam com os bônus que você tinha quando caçou.
 - Desde 15/10/2026 o loot de itens não vira gold e o NPC não compra os drops especiais (tokens, fragmentos): o helper mostra só a frequência deles.
 - A chance de captura não inclui boosts aplicados pelo servidor (Capture Boost, Kick, Prey, Safari); compare com a sua taxa real mostrada na mesma aba.

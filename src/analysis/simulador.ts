@@ -20,8 +20,7 @@ const PODER_INVESTIDA = 30;
 const PODER_Z = 2800;
 const RECARGA_Z_MS = 60_000;
 const INTERVALO_SELVAGEM_MS = 1400;
-const DESLOCAMENTO_POR_ABATE_S = (600 + 2000) / 1000;
-const ONDA_S = 2.6;
+const MULT_SAZONAL = 2;
 const MAX_MOBS = 16;
 
 export interface Atacante {
@@ -113,6 +112,22 @@ function golpesDoAtacante(a: Atacante): GolpeEfetivo[] {
   return [...daEspecie, ...z];
 }
 
+function multSazonal(
+  p: ParametrosCombate,
+  atacante: readonly string[],
+  defensor: readonly string[],
+  atacanteSelvagem: boolean,
+): number {
+  const tipo = p.tipoSazonal;
+  if (!tipo) return 1;
+  const selvagemProtegido = p.escudoSazonal;
+  const ataca =
+    atacante.includes(tipo) && !(atacanteSelvagem && selvagemProtegido) ? MULT_SAZONAL : 1;
+  const apanha =
+    defensor.includes(tipo) && !(!atacanteSelvagem && selvagemProtegido) ? MULT_SAZONAL ** 2 : 1;
+  return ataca / apanha;
+}
+
 function tipoDaInvestida(
   tipos: readonly string[],
   defensor: readonly string[],
@@ -193,14 +208,14 @@ export function simularHunt(
       esp.tipos,
       tabela,
       p,
-      p.multDanoExtra,
+      p.multDanoExtra * multSazonal(p, a.especie.tipos, esp.tipos, false),
     );
     const { dps, acoesPorSeg } = alocarDps(meusGolpes, intervalo);
     if (dps <= 0) continue;
     const danoPorAcao = dps / acoesPorSeg;
     const acoesPorAbate = Math.max(1, Math.ceil(hp / danoPorAcao));
     const tLutaS = acoesPorAbate / acoesPorSeg / alvosAoe;
-    const tAbateS = tLutaS + DESLOCAMENTO_POR_ABATE_S + ONDA_S / porOnda;
+    const tAbateS = tLutaS + p.deslocamentoPorAbateS + p.esperaPorOndaS / porOnda;
 
     const investidaSelvagem: GolpeEfetivo = {
       tipo: tipoDaInvestida(esp.tipos, a.especie.tipos, tabela),
@@ -225,7 +240,7 @@ export function simularHunt(
       a.especie.tipos,
       tabela,
       p,
-      p.multDanoSelvagem,
+      p.multDanoSelvagem * multSazonal(p, esp.tipos, a.especie.tipos, true),
     );
     porEspecie.push({
       pokeId,

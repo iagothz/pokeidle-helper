@@ -5,6 +5,29 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.7.0] - 2026-11-26
+
+### Adicionado
+
+- Medidor de fases pelos horários dos eventos de batalha: **lutando** (seu ataque até a morte do mob), **andando** (morte ou spawn até o próximo ataque seu) e **esperando onda** (campo vazio até o próximo spawn). Aparece na Sessão como "Onde vai o tempo".
+- Golpes dados e dano causado pelo seu pokémon na sessão (golpes reais por abate).
+- Calibração por componente: o dano do simulador é ajustado pela razão golpes simulados ÷ reais, e os 2,6 s fixos de deslocamento e de onda são trocados pelos medidos; o que sobra vira o ajuste final (agora entre ×0,05 e ×20).
+- Dia sazonal no simulador (`diaSazonal.tipo`): pokémon do tipo do dia bate ×2 e apanha ÷4; selvagens do tipo idem, exceto com o Shield do Novato (`level < loja.alvoAtrasados`).
+- Logs: "Dados de combate do ativo" uma vez por pokémon e "Resumo da sessão" ao fechar cada sessão, com taxas, fases, golpes, previsão do simulador, calibração, dia sazonal e bônus.
+
+### Corrigido
+
+- A fase em andamento (por exemplo a espera da última onda) passa a contar até o fim da sessão.
+
+## [0.6.0] - 2026-11-26
+
+### Alterado
+
+- Visual novo com **escala contínua de cor**: cada número tem uma nota de 0 a 1 que vai do vermelho (0) ao branco (0,5) e ao verde (1). Os limites aprovados (ex.: autonomia de 15 min e 1 h, golpes por abate 3 e 15) são os pontos de 1/3 e 2/3 da rampa. Regras em `src/ui/tons.ts` (testadas).
+- Cores dinâmicas na hunt atual: XP/h, lucro, gold e abates comparados com as outras hunts liberadas pelo nível do treinador (a nota é o percentil entre elas) e ajustados pela sua média histórica na mesma hunt (até ±1/3 da escala, proporcional à diferença; ±10% já dá o deslocamento cheio). O motivo aparece embaixo do número.
+- Placar no topo da Sessão (Lucro/h, XP/h, Autonomia), barras proporcionais no ranking e no Time, bolinha de estado no botão PH.
+- Números e tempos curtos ("11,5 mil", "21s", "16min", "6d 03h"); o valor exato fica no tooltip.
+
 ## [0.5.0] - 2026-11-26
 
 ### Adicionado
