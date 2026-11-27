@@ -8,6 +8,7 @@ export const ABAS_PAINEL = [
   'economia',
   'hunts',
   'historico',
+  'automacao',
   'opcoes',
 ] as const;
 export type AbaPainel = (typeof ABAS_PAINEL)[number];

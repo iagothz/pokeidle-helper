@@ -23,6 +23,7 @@ export const esquemaBola = z.object({
   name: z.string().optional(),
   nome: z.string().optional(),
   priceGold: z.coerce.number().optional().catch(undefined),
+  compravel: z.boolean().optional().catch(undefined),
   catchRate: z.coerce.number().optional().catch(undefined),
 });
 export type Bola = z.infer<typeof esquemaBola>;
@@ -95,7 +96,63 @@ export const esquemaJogador = z.object({
   pokemons: z.array(z.unknown()).optional().catch(undefined),
   items: z.unknown().optional(),
   balls: z.unknown().optional(),
+  pokedex: z.unknown().optional(),
+  automation: z.unknown().optional(),
+  loja: z.object({ vip: z.unknown().optional() }).optional().catch(undefined),
 });
+
+export function lerEspeciesCapturadas(bruto: unknown): Set<number> {
+  const capturadas = new Set<number>();
+  if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return capturadas;
+  for (const [chave, entrada] of Object.entries(bruto)) {
+    const id = idPositivo(chave);
+    if (id === null || !entrada || typeof entrada !== 'object') continue;
+    if (Number((entrada as { c?: unknown }).c) > 0) capturadas.add(id);
+  }
+  return capturadas;
+}
+
+export interface AutomacaoJogo {
+  autoBallAteCapturar: boolean;
+  autoBallSemParar: boolean;
+  autoBall: boolean;
+  ballIds: number[];
+  autoRevive: boolean;
+  reviveIds: number[];
+  autoPotion: boolean;
+  potionIds: number[];
+  hpLimiar?: number;
+  autoVoltarHunt: boolean;
+  pvpAutoFila: boolean;
+}
+
+const bool = z.boolean().catch(false).default(false);
+const ids = z
+  .array(z.unknown())
+  .catch([])
+  .default([])
+  .transform((l) => l.map(Number).filter((n) => Number.isInteger(n) && n > 0));
+
+const esquemaAutomacao = z.object({
+  autoBallAteCapturar: bool,
+  autoBallSemParar: bool,
+  autoBall: bool,
+  ballIds: ids,
+  autoRevive: bool,
+  reviveIds: ids,
+  autoPotion: bool,
+  potionIds: ids,
+  hpLimiar: z.number().min(0).max(1).optional().catch(undefined),
+  autoVoltarHunt: bool,
+  pvpAutoFila: bool,
+});
+
+export function lerAutomacao(bruto: unknown): AutomacaoJogo {
+  const res = esquemaAutomacao.safeParse(bruto && typeof bruto === 'object' ? bruto : {});
+  const a = res.success ? res.data : esquemaAutomacao.parse({});
+  const { hpLimiar, ...resto } = a;
+  return hpLimiar === undefined ? resto : { ...resto, hpLimiar };
+}
 
 export function lerQuantidades(bruto: unknown): Record<string, number> {
   if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return {};

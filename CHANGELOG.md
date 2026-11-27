@@ -5,6 +5,26 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+### Adicionado
+
+- Aba **Automação**, com chave geral desligada por padrão e uma chave por automação:
+  - viagem com nova tentativa a cada 1 s ao clicar numa hunt da aba Hunts (para ao chegar, em 60 s, na troca manual ou ao cancelar);
+  - captura de espécies fora da pokédex: com VIP liga o "lançar até capturar" do jogo; sem VIP, arremessa bola pelo painel de caídos;
+  - reposição de balls, poções e revives (mínimo 200, alvo 1000, reserva de gold opcional, uma compra por item a cada 30 s);
+  - troca do ativo pelo melhor da hunt ao chegar;
+  - rotação de hunts quando o nível do treinador libera uma nova (por lucro/h, XP/h ou maior nível).
+- Canal de comandos do content script para o script da página, com lista branca (`hunt.select`, `auto.set`, `shop.buy`, `team.active`), validação Zod dos dois lados e limite de 1 msg/s por tipo e 90/min.
+- Estado do jogador com pokédex (espécies capturadas), automações nativas e VIP.
+
+### Alterado
+
+- O selo do painel mostra "automação ligada" quando a chave geral está ativa; a descrição da extensão deixa de dizer "somente leitura".
+
+### Documentação
+
+- `docs/plano-automacoes.md`: plano, critérios de aceite e riscos das automações.
+- `docs/mensagens-cliente.md`: mapa dos 240 tipos de mensagem que o cliente do jogo (v1.495.6) envia pelo WebSocket, com campos e função de origem.
+
 ## [0.9.0] - 2026-11-26
 
 ### Adicionado

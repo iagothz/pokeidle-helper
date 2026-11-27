@@ -214,6 +214,7 @@ export class Aplicacao {
       this.capturaStats = envelope.dados as Record<string, number>;
       return;
     }
+    if (envelope.tipo === 'resultadoComando') return;
     this.ultimaMensagemEm = envelope.recebidoEm;
     const tipo = this.d.estado.aplicarMensagem(envelope.dados);
     if (tipo === 'batalha') {

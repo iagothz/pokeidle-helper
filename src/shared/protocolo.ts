@@ -7,7 +7,7 @@ export type TipoCapturado = (typeof TIPOS_CAPTURADOS)[number];
 export interface EnvelopePonte {
   origem: typeof ORIGEM_PONTE;
   v: typeof VERSAO_PONTE;
-  tipo: 'mensagem' | 'diagnostico';
+  tipo: 'mensagem' | 'diagnostico' | 'resultadoComando';
   recebidoEm: number;
   dados: unknown;
 }

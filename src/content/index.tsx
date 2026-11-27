@@ -14,6 +14,14 @@ import { enviarBackup, importarTextos, type MensagemBackup } from './backupArqui
 import type { RespostaBackup } from '../background/gravadorBackup';
 import type { EnvelopeValido } from '../bridge/receptor';
 import type { Sessao } from '../domain/sessao';
+import { ServicoAutomacao } from './automacao/servicoAutomacao';
+import { montarAcoesAutomacao } from './automacao/acoesAutomacao';
+import {
+  CHAVE_PREFERENCIAS_AUTOMACAO,
+  lerPreferenciasAutomacao,
+  type PreferenciasAutomacao,
+} from '../shared/preferenciasAutomacao';
+import type { ResultadoComando } from '../shared/comandos';
 
 const versao = __VERSAO__;
 const gerenciador = new GerenciadorLog('INFO');
@@ -52,6 +60,35 @@ async function carregarPreferencias(): Promise<PreferenciasUi> {
 }
 
 let preferenciasAtuais: PreferenciasUi = lerPreferencias(undefined);
+let automacaoAtual: PreferenciasAutomacao = lerPreferenciasAutomacao(undefined);
+
+async function carregarPreferenciasAutomacao(): Promise<PreferenciasAutomacao> {
+  try {
+    const r = await chrome.storage.local.get(CHAVE_PREFERENCIAS_AUTOMACAO);
+    return lerPreferenciasAutomacao(r[CHAVE_PREFERENCIAS_AUTOMACAO]);
+  } catch (erro) {
+    log.warn('Não foi possível ler as preferências de automação', erroParaCtx(erro));
+    return lerPreferenciasAutomacao(undefined);
+  }
+}
+
+function salvarPreferenciasAutomacao(p: PreferenciasAutomacao): void {
+  automacaoAtual = p;
+  log.info('Preferências de automação alteradas', {
+    ligada: p.ligada,
+    viagem: p.viagem,
+    autoBallDex: p.autoBallDex,
+    melhorAtivo: p.melhorAtivo,
+    reposicao: p.reposicao.ligada,
+    regras: p.reposicao.regras.length,
+    rotacao: p.rotacao.ligada,
+  });
+  chrome.storage.local
+    .set({ [CHAVE_PREFERENCIAS_AUTOMACAO]: p })
+    .catch((erro: unknown) =>
+      log.warn('Falha ao salvar preferências de automação', erroParaCtx(erro)),
+    );
+}
 let backupAgendado: number | null = null;
 const ESPERA_BACKUP_MS = 3_000;
 const BACKUP_PERIODICO_MS = 5 * 60_000;
@@ -154,8 +191,50 @@ async function iniciar() {
   const preferencias = await carregarPreferencias();
   preferenciasAtuais = preferencias;
 
-  entregar = (e) => app.receber(e);
-  for (const e of pendentes.splice(0)) app.receber(e);
+  automacaoAtual = await carregarPreferenciasAutomacao();
+  const automacao = new ServicoAutomacao({
+    preferencias: () => automacaoAtual,
+    jogador: () => estado.jogador(),
+    postar: (envelope) => window.postMessage(envelope, window.location.origin),
+    preco: (kind, id) =>
+      kind === 'ball'
+        ? estado.bolas.get(id)?.priceGold
+        : (estado.itensJogo.get(id)?.npcPrice ?? itens.obter(id)?.npcPrice),
+    melhorDaHunt: (slug) => {
+      const linha = app.modelo().ranking?.linhas.find((l) => l.slug === slug);
+      return linha?.melhorPokemon ? String(linha.melhorPokemon.id) : null;
+    },
+    candidatasRotacao: () => app.modelo().ranking?.linhas ?? [],
+    especiePorNome: (() => {
+      let mapa: Map<string, number> | null = null;
+      return (nome: string) => {
+        mapa ??= new Map([...especies.todas()].map((e) => [e.nome.toLowerCase(), e.pokeId]));
+        return mapa.get(nome.toLowerCase());
+      };
+    })(),
+    dom: document,
+    log: log.filho('automacao'),
+  });
+
+  const receber = (e: EnvelopeValido) => {
+    if (e.tipo === 'resultadoComando') {
+      automacao.aoResultado(e.dados as ResultadoComando);
+      return;
+    }
+    app.receber(e);
+    const dados = e.dados as { t?: unknown; ev?: unknown } | null;
+    if (e.tipo === 'mensagem' && dados?.t === 'batalha' && Array.isArray(dados.ev))
+      automacao.aoEventosBatalha(dados.ev);
+  };
+  entregar = receber;
+  for (const e of pendentes.splice(0)) receber(e);
+  const tiqueAutomacao = window.setInterval(() => {
+    try {
+      automacao.tique();
+    } catch (erro) {
+      log.error('Falha no ciclo de automação', erroParaCtx(erro));
+    }
+  }, 250);
 
   const checkpoint = window.setInterval(() => app.checkpoint(), 30_000);
   const descarga = window.setInterval(() => void destinoBanco?.descarregar(), config.logs.flushMs);
@@ -205,6 +284,13 @@ async function iniciar() {
       fazerBackup: () => fazerBackup(app),
       importarBackup: (textos: string[]) =>
         importarTextos(textos, (json) => app.importarSessoes(json)),
+      automacao: montarAcoesAutomacao({
+        servico: automacao,
+        estado,
+        itens,
+        preferencias: () => automacaoAtual,
+        salvar: salvarPreferenciasAutomacao,
+      }),
     });
     log.info('Helper iniciado', { versao });
   });
@@ -214,6 +300,7 @@ async function iniciar() {
     clearInterval(checkpoint);
     clearInterval(descarga);
     clearInterval(backupPeriodico);
+    clearInterval(tiqueAutomacao);
   };
 }
 

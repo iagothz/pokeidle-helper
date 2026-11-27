@@ -80,6 +80,11 @@ select, .campo-nivel { background: var(--fundo-2); color: var(--texto); border: 
 .campo-nivel { width: 90px; }
 .mostrar-mais { width: 100%; margin-top: 8px; }
 .perigo-btn { border-color: var(--ruim); color: var(--ruim); }
+.erro-texto { color: var(--ruim); }
+.linha-clicavel { cursor: pointer; }
+.linha-clicavel:hover td { background: var(--fundo-2); }
+.linha-destino td:first-child { box-shadow: inset 3px 0 0 var(--alerta); }
+.selo-auto { color: var(--alerta); font-weight: 700; }
 dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 8px 0 0; }
 dt { color: var(--texto-2); }
 dd { margin: 0; }

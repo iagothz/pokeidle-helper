@@ -10,6 +10,34 @@ import batalhas from '../fixtures/batalha-bellsprout.json';
 import { catalogos } from '../helpers/catalogos';
 import { logDeTeste } from '../helpers/log';
 import { PREFERENCIAS_PADRAO, type PreferenciasUi } from '../../src/shared/preferencias';
+import {
+  PREFERENCIAS_AUTOMACAO_PADRAO,
+  type PreferenciasAutomacao,
+} from '../../src/shared/preferenciasAutomacao';
+import type { ModeloAutomacao } from '../../src/content/automacao/servicoAutomacao';
+
+function automacaoFalsa(inicial: PreferenciasAutomacao = PREFERENCIAS_AUTOMACAO_PADRAO) {
+  let prefs = inicial;
+  const modelo: ModeloAutomacao = {
+    ligada: inicial.ligada,
+    vip: false,
+    viagem: null,
+    ultimaViagem: null,
+    comandos: [],
+  };
+  return {
+    preferencias: () => prefs,
+    salvar: vi.fn((p: PreferenciasAutomacao) => {
+      prefs = p;
+    }),
+    modelo: () => ({ ...modelo, ligada: prefs.ligada }),
+    viajar: vi.fn(() => true),
+    cancelarViagem: vi.fn(),
+    itensCompraveis: () => [
+      { kind: 'ball' as const, id: 1, nome: 'Poke Ball', preco: 100, estoque: 150 },
+    ],
+  };
+}
 
 const esperar = (ms = 300) => new Promise((r) => setTimeout(r, ms));
 const relogio = { agora: 0 };
@@ -44,8 +72,12 @@ function criarApp() {
   });
 }
 
-function acoesFalsas(preferencias: PreferenciasUi = PREFERENCIAS_PADRAO) {
+function acoesFalsas(
+  preferencias: PreferenciasUi = PREFERENCIAS_PADRAO,
+  automacao = automacaoFalsa(),
+) {
   return {
+    automacao,
     preferencias: () => preferencias,
     salvarPreferencias: vi.fn(),
     exportarDados: vi.fn(),
@@ -102,6 +134,36 @@ describe('formatação', () => {
 });
 
 describe('painel', () => {
+  it('liga a automação, viaja ao clicar numa hunt e configura a reposição', async () => {
+    const app = criarApp();
+    const automacao = automacaoFalsa();
+    const ui = montarInterface(document, app, acoesFalsas(PREFERENCIAS_PADRAO, automacao));
+    desmontar = ui.desmontar;
+    const raiz = ui.raiz;
+    app.receber(env(welcome, 0));
+    clicar(raiz, 'PH');
+    await esperar(10);
+    expect(raiz.textContent).toContain('somente leitura');
+    clicar(raiz, 'Automação');
+    await esperar(10);
+    expect(raiz.textContent).toContain('Sem VIP');
+    const caixas = () => [...raiz.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    caixas()[0]!.click();
+    await esperar(10);
+    expect(automacao.salvar).toHaveBeenLastCalledWith(expect.objectContaining({ ligada: true }));
+    const pokeBall = caixas().find((c) => c.parentElement?.textContent?.includes('Poke Ball'))!;
+    pokeBall.click();
+    await esperar(10);
+    expect(automacao.preferencias().reposicao.regras).toEqual([
+      { kind: 'ball', id: 1, minimo: 200, alvo: 1000 },
+    ]);
+    clicar(raiz, 'Hunts');
+    await esperar(1100);
+    expect(raiz.textContent).toContain('automação ligada');
+    (raiz.querySelector('tr.linha-clicavel') as HTMLElement).click();
+    expect(automacao.viajar).toHaveBeenCalledTimes(1);
+  });
+
   it('mostra aguardando login, depois sessão, ranking e opções', async () => {
     const app = criarApp();
     const acoes = acoesFalsas();

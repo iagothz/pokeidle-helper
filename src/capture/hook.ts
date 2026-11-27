@@ -18,8 +18,14 @@ export interface OpcoesCaptura {
   agendar?: (fn: () => void) => void;
 }
 
+export interface SocketJogo {
+  readonly readyState: number;
+  send(dados: string): void;
+}
+
 export interface Captura {
   desinstalar(): void;
+  socket(): SocketJogo | null;
   estatisticas(): { recebidas: number; publicadas: number; descartadas: number; erros: number };
 }
 
@@ -42,6 +48,7 @@ export function instalarCaptura(janela: JanelaComWs, opcoes: OpcoesCaptura): Cap
   const fila: { bruto: string; em: number }[] = [];
   const stats = { recebidas: 0, publicadas: 0, descartadas: 0, erros: 0 };
   let agendado = false;
+  let socketAtual: SocketJogo | null = null;
 
   const processar = () => {
     agendado = false;
@@ -92,10 +99,15 @@ export function instalarCaptura(janela: JanelaComWs, opcoes: OpcoesCaptura): Cap
     }
   };
 
+  const registrar = (ws: SocketJogo) => {
+    socketAtual = ws;
+  };
+
   class WebSocketObservado extends Original {
     constructor(url: string | URL, protocolos?: string | string[]) {
       super(url, protocolos);
       if (!deveObservar(url)) return;
+      registrar(this);
       this.addEventListener('message', (ev: MessageEvent) => {
         if (typeof ev.data === 'string') enfileirar(ev.data);
       });
@@ -110,6 +122,7 @@ export function instalarCaptura(janela: JanelaComWs, opcoes: OpcoesCaptura): Cap
       janela.WebSocket = Original;
       Reflect.deleteProperty(janela, MARCA_INSTALADO);
     },
+    socket: () => socketAtual,
     estatisticas: () => ({ ...stats }),
   };
   janela[MARCA_INSTALADO] = captura;

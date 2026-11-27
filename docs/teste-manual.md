@@ -28,3 +28,17 @@ Faça com o Brave Shields **ligado**.
 - [ ] Em **Opções**, clicar em "Fazer backup agora" e conferir `Downloadspokeidle-helperpokeidle-helper-backup.json` com todas as sessões.
 - [ ] Fechar uma sessão (trocar de hunt) e ver o arquivo de backup atualizado.
 - [ ] Limpar o histórico, importar o backup e ver as sessões de volta no **Histórico**.
+
+## Automações
+
+- [ ] Com a chave geral desligada, abrir a aba **Automação** e conferir o selo "somente leitura" no cabeçalho; clicar numa hunt da aba **Hunts** não faz nada.
+- [ ] Ligar a chave geral: o cabeçalho mostra "automação ligada".
+- [ ] **Viagem:** clicar numa hunt liberada logo depois de levar dano; a linha mostra "indo (n)" e a troca acontece uns 3 s depois. Conferir "Última viagem: … chegou".
+- [ ] **Viagem:** clicar numa hunt e, antes de chegar, trocar de hunt pelo mapa do jogo: a viagem termina como "troca manual".
+- [ ] **Captura (VIP):** numa hunt com espécie sem captura na pokédex, ligar "Capturar espécies que faltam" e ver o "lançar até capturar" acender no painel de automações do jogo; depois da captura, confirmar que o jogo desliga sozinho.
+- [ ] **Captura (sem VIP):** escolher a bola no painel de caídos; quando cair uma espécie sem captura, ver a bola sendo arremessada (uma a cada ~1 s) e nenhuma nas espécies já capturadas.
+- [ ] **Reposição:** marcar uma bola com estoque abaixo de 200, fora do Centro; conferir se a compra até 1000 acontece. Se o jogo recusar fora do Centro, anotar e exportar os logs.
+- [ ] **Reposição:** com reserva de gold maior que o gold atual, nada é comprado e o log registra "Gold insuficiente para repor".
+- [ ] **Time:** com "Trocar o ativo pelo melhor" ligado, viajar para uma hunt onde o "melhor" da aba Hunts é outro pokémon e ver a troca do ativo.
+- [ ] **Rotação:** subir de nível até liberar uma hunt nova e ver a viagem automática para a melhor pelo critério escolhido.
+- [ ] Conferir "Últimas ações" na aba **Automação** e as entradas "Comando enviado" nos logs exportados.

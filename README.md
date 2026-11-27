@@ -10,16 +10,19 @@ Extensão para Brave (e outros navegadores Chromium) que acompanha suas hunts no
 - **Progresso:** tempo até qualquer nível-alvo (curva de XP do jogo), quanto falta para o ativo evoluir, pokémons travados pelo nível do treinador e quando liberam, custo do próximo refino.
 - **Economia:** chance de captura por bola de cada espécie da hunt, bolas e gold por captura e a melhor bola, arremessos esperados por shiny, pedras de evolução por hora e tempo até o próximo ovo shiny.
 - **Dicas de tipo:** vantagem ou desvantagem do pokémon ativo contra a hunt, alerta com a fração real de golpes super efetivos recebidos e qual pokémon do seu time rende mais ali.
+- **Automações (opcionais, desligadas por padrão):** viajar para uma hunt com um clique (tenta de novo a cada segundo até o jogo deixar), capturar espécies que faltam na pokédex, repor balls, poções e revives, trocar o ativo pelo melhor da hunt e mudar de hunt quando o nível libera uma nova.
 
-A extensão é **somente leitura**: ela observa as mensagens que o jogo já recebe e não envia nada ao servidor.
+Por padrão a extensão é **somente leitura**: observa as mensagens que o jogo já recebe e não envia nada ao servidor. Só envia algo com a chave **Ligar automações** ativa, e mesmo assim apenas as ações da lista branca abaixo.
 
 ## Conformidade com os Termos do PokeIdle
 
 A seção 5 dos [Termos](https://pokeidle.io/terms) permite automações, desde que não explorem falhas, não burlem limites e não sobrecarreguem o servidor. O helper fica bem longe disso:
 
-- não envia mensagens pelo WebSocket nem faz requisições aos endpoints do jogo (há teste automatizado para isso);
+- com as automações desligadas (padrão), não envia mensagens pelo WebSocket nem faz requisições aos endpoints do jogo (há teste automatizado para isso);
+- com as automações ligadas, envia só `hunt.select`, `auto.set`, `shop.buy` e `team.active`, as mesmas mensagens que os botões do jogo mandam. A lista branca e os campos são validados de novo no script da página, com no máximo uma mensagem de cada tipo por segundo e 90 por minuto. Cada envio fica no log e na aba **Automação**;
+- não contorna nenhuma trava do jogo: o "lançar até capturar" só é ligado para quem tem VIP (como no jogo); sem VIP, o helper clica no painel de caídos do jogo, como você faria;
+- não compra nada com moeda premium nem interage com outros jogadores;
 - só baixa os arquivos estáticos que o próprio jogo já carrega: `/assets/creatures*.json`, `/assets/creatures-audit-overrides.json`, `/assets/items.json` e `/shared/golpes-planilhas.mjs`. Este último é **lido como texto** para extrair a tabela de golpes; o helper nunca executa código do jogo;
-- não automatiza nenhuma ação.
 
 Não use VPN, VPS nem proxy para jogar; os Termos proíbem.
 
@@ -66,6 +69,12 @@ Cores: uma escala contínua do **vermelho** (ruim) ao **branco** (intermediário
 - **Progresso:** metas de nível com tempo estimado, evolução do ativo, pokémons travados pelo nível do treinador e custo de refino.
 - **Economia:** captura por bola e espécie, melhor bola, shiny, pedras/h e ovo shiny da hunt atual.
 - **Histórico:** todas as sessões salvas (de 50 em 50, com "Mostrar mais"), filtro por hunt e resumo do período filtrado.
+- **Automação:** chave geral e uma chave por automação.
+  - **Viagem:** com ela ligada, clique numa linha da aba **Hunts**. O helper reenvia a troca a cada 1 s (o jogo só deixa trocar depois de 3 s sem receber dano) e para ao chegar, depois de 60 s, se você trocar de hunt manualmente ou clicar em **Cancelar**.
+  - **Captura:** quando aparece uma espécie sem captura na pokédex, com VIP liga o "lançar até capturar" do jogo (que desliga sozinho depois da captura); sem VIP, arremessa a bola escolhida no painel de caídos, só nessas espécies.
+  - **Time:** ao chegar numa hunt, troca o ativo pelo "melhor" da aba Hunts.
+  - **Rotação:** quando o nível do treinador libera uma hunt nova, viaja para a melhor liberada por lucro/h, XP/h ou maior nível.
+  - **Reposição:** marque os itens da loja; quando o estoque cai abaixo do mínimo (padrão 200), compra até o alvo (padrão 1000), sem gastar a reserva de gold, no máximo uma compra por item a cada 30 s.
 - **Opções:** backup em arquivo (automático ao fechar cada sessão ou manual), importar backup, exportar seus dados e os logs em JSON, mudar o nível de log, limpar o histórico e conferir se o jogo manda os dados de combate do seu ativo.
 
 Sessões com menos de 3 min ativos são descartadas. O custo dos consumíveis usa o preço de NPC (`npcPrice`) e o `priceGold` das bolas, o mesmo critério do painel SESSÃO do jogo.
@@ -104,12 +113,12 @@ O CI (GitHub Actions) roda tudo isso a cada push e PR e anexa o `.zip` como arte
 
 ```
 src/
-  capture/       hook do WebSocket (world MAIN), somente leitura
+  capture/       hook do WebSocket (world MAIN) e receptor de comandos com lista branca
   bridge/        recebe as mensagens da captura e valida o envelope
   domain/        schemas, estado do jogo, sessões, catálogos
   persistence/   IndexedDB: sessões e logs com rotação
   analysis/      fórmulas do jogo, tipos, taxas, ranking
-  content/       orquestração (Aplicacao) e ponto de entrada
+  content/       orquestração (Aplicacao), automações e ponto de entrada
   ui/            painel Preact em Shadow DOM
 tests/           unit, integration (replay), e2e (Chromium), fixtures
 docs/            arquitetura, protocolo e roteiro de teste manual

@@ -14,7 +14,7 @@ Na v1.492.0 a contagem é idêntica à do jogo, incluindo o `bossEntrou` (tokens
 
 ## Mensagens
 
-O jogo usa um único WebSocket em `wss://pokeidle.io` com mensagens JSON identificadas pelo campo `t`. Ao abrir, o cliente envia `{ t: 'hello', nick, token, delta: 1, dispositivo }`. O helper nunca lê nem reproduz essa mensagem.
+O jogo usa um único WebSocket em `wss://pokeidle.io` com mensagens JSON identificadas pelo campo `t`. Ao abrir, o cliente envia `{ t: 'hello', nick, token, delta: 1, dispositivo }`. O helper nunca lê nem reproduz essa mensagem (o `hello` não está na lista branca de comandos). A lista completa do que o cliente envia está em [mensagens-cliente.md](mensagens-cliente.md).
 
 ## Mensagens recebidas usadas pelo helper
 

@@ -18,7 +18,10 @@ import {
   esquemaBonusJogador,
   esquemaEvento,
   esquemaTipoBoost,
+  lerAutomacao,
+  lerEspeciesCapturadas,
   lerQuantidades,
+  type AutomacaoJogo,
   type Bola,
   type Hunt,
   type Item,
@@ -39,6 +42,9 @@ export interface Jogador {
   pokemons: PokemonJogador[];
   itens: Record<string, number>;
   bolas: Record<string, number>;
+  especiesCapturadas: ReadonlySet<number>;
+  automacao: AutomacaoJogo;
+  vip: boolean;
 }
 
 export interface TipoBoost {
@@ -245,6 +251,9 @@ export class EstadoJogo {
       pokemons,
       itens: lerQuantidades(j.items),
       bolas: lerQuantidades(j.balls),
+      especiesCapturadas: lerEspeciesCapturadas(j.pokedex),
+      automacao: lerAutomacao(j.automation),
+      vip: j.loja?.vip === true,
     };
     return this.jogadorCache;
   }

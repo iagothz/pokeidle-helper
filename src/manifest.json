@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PokeIdle Helper",
   "version": "0.0.0",
-  "description": "Analisa suas hunts no PokeIdle (somente leitura): XP/h, lucro, consumíveis e dicas de tipo.",
+  "description": "Analisa suas hunts no PokeIdle: XP/h, lucro, consumíveis e dicas de tipo, com automações opcionais.",
   "minimum_chrome_version": "111",
   "permissions": ["storage", "downloads"],
   "host_permissions": ["https://pokeidle.io/*"],
