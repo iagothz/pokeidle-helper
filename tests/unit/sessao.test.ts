@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { RastreadorSessao, type Sessao } from '../../src/domain/sessao';
+import {
+  RastreadorSessao,
+  VERSAO_SESSAO,
+  normalizarSessao,
+  novaSessao,
+  type Sessao,
+} from '../../src/domain/sessao';
 import batalhas from '../fixtures/batalha-bellsprout.json';
 import { logDeTeste } from '../helpers/log';
 
@@ -112,6 +118,79 @@ describe('RastreadorSessao', () => {
     expect(memoria.entradas.some((e) => e.nivel === 'ERROR')).toBe(true);
   });
 
+  it('conta golpes recebidos dos selvagens sem contar como tempo ativo', () => {
+    const { r } = criar();
+    r.definirHunt('bellsprout', 'Bellsprout', 0);
+    r.processarEventos([{ k: 'spawn', speciesId: 69 }], 1000);
+    r.processarEventos(
+      [
+        { k: 'ataque', por: 'selvagem', slot: 3, tipo: 'GRASS', dano: 120, ef: 2 },
+        { k: 'ataque', por: 'selvagem', slot: 3, tipo: 'GRASS', dano: 30, ef: 0.5 },
+        { k: 'ataque', por: 'selvagem', slot: 4, tipo: 'POISON', dano: 200, ef: 4 },
+        { k: 'ataque', por: 'jogador', slot: 3, tipo: 'FIRE', dano: 622, ef: 2.5 },
+        { k: 'ataque', por: 'selvagem', dano: 'x', ef: 'y' },
+      ],
+      50_000,
+    );
+    const s = r.sessaoAtual!;
+    expect(s.golpesRecebidos).toBe(4);
+    expect(s.golpesSuperEfetivos).toBe(2);
+    expect(s.danoRecebido).toBe(350);
+    expect(s.msAtivo).toBe(0);
+  });
+
+  it('conta desmaios do seu pokémon, XP perdido e fugas de captura', () => {
+    const { r } = criar();
+    r.definirHunt('bellsprout', 'Bellsprout', 0);
+    r.processarEventos(
+      [
+        { k: 'morte', quem: 'jogador' },
+        { k: 'morte', quem: 'jogador' },
+        { k: 'xpPerdido', qtd: 150 },
+        { k: 'xpPerdido', qtd: -5 },
+        { k: 'xpPerdido', qtd: 'x' },
+        { k: 'fugiu', nome: 'Bellsprout', level: 3 },
+        { k: 'capturado', pokemon: {} },
+      ],
+      1000,
+    );
+    expect(r.sessaoAtual).toMatchObject({ desmaios: 2, xpPerdido: 150, fugas: 1, capturas: 1 });
+  });
+
+  it('soma o gold das capturas vendidas automaticamente', () => {
+    const { r } = criar();
+    r.definirHunt('bellsprout', 'Bellsprout', 0);
+    r.processarEventos(
+      [
+        { k: 'capturado', pokemon: {}, vendidoAuto: 1500 },
+        { k: 'capturado', pokemon: {}, vendidoAuto: 'x' },
+        { k: 'capturado', pokemon: {} },
+      ],
+      1000,
+    );
+    expect(r.sessaoAtual).toMatchObject({ capturas: 3, vendasAuto: 1500 });
+  });
+
+  it('registra o primeiro pokémon ativo visto na sessão', () => {
+    const { r } = criar();
+    r.registrarPokemon({ id: '9', speciesId: 4, level: 30 });
+    expect(r.sessaoAtual).toBeNull();
+    r.definirHunt('bellsprout', 'Bellsprout', 0);
+    r.registrarPokemon({ id: '9', speciesId: 4, level: 30 });
+    r.registrarPokemon({ id: '10', speciesId: 7, level: 50 });
+    expect(r.sessaoAtual?.pokemon).toEqual({ id: '9', speciesId: 4, level: 30 });
+  });
+
+  it('registra tokens gastos ao entrar num boss, como o jogo', () => {
+    const { r } = criar();
+    r.definirHunt('bellsprout', 'Bellsprout', 0);
+    r.processarEventos(
+      [{ k: 'bossEntrou' }, { k: 'bossEntrou', entrada: { itemId: 70011, qtd: 3 } }],
+      1000,
+    );
+    expect(r.sessaoAtual!.tokens).toEqual({ '70000': 1, '70011': 3 });
+  });
+
   it('rejeita ids inválidos de consumíveis', () => {
     const { r } = criar();
     r.definirHunt('bellsprout', 'Bellsprout', 0);
@@ -125,5 +204,38 @@ describe('RastreadorSessao', () => {
       1,
     );
     expect(r.sessaoAtual).toMatchObject({ pocoes: {}, revives: {}, bolas: {} });
+  });
+});
+
+describe('normalizarSessao', () => {
+  it('completa sessões da versão 1 com os campos novos zerados', () => {
+    const antiga = {
+      ...novaSessao('bellsprout', 'Bellsprout', 0),
+      schemaVersion: 1,
+      golpesRecebidos: undefined,
+      golpesSuperEfetivos: undefined,
+      danoRecebido: undefined,
+      tokens: undefined,
+      desmaios: undefined,
+      xpPerdido: undefined,
+      fugas: undefined,
+    };
+    const s = normalizarSessao(antiga as unknown as Sessao);
+    expect(s).toMatchObject({
+      schemaVersion: VERSAO_SESSAO,
+      golpesRecebidos: 0,
+      golpesSuperEfetivos: 0,
+      danoRecebido: 0,
+      tokens: {},
+      desmaios: 0,
+      xpPerdido: 0,
+      fugas: 0,
+      huntSlug: 'bellsprout',
+    });
+  });
+
+  it('mantém sessões atuais intactas', () => {
+    const atual = { ...novaSessao('x', 'X', 5), golpesRecebidos: 7, tokens: { '70000': 2 } };
+    expect(normalizarSessao(atual)).toEqual(atual);
   });
 });

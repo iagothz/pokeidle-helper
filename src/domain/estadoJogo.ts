@@ -1,5 +1,12 @@
 import type { Logger } from '../shared/logger';
 import {
+  CAPTURA_PADRAO,
+  PARAMETROS_COMBATE_PADRAO,
+  type ParametrosCaptura,
+  type ParametrosCombate,
+} from './parametros';
+import { MescladorEstado } from './mescladorEstado';
+import {
   esquemaBatalhaMsg,
   esquemaBola,
   esquemaEstadoMsg,
@@ -8,6 +15,10 @@ import {
   esquemaJogador,
   esquemaPokemon,
   esquemaWelcome,
+  esquemaBonusJogador,
+  esquemaEvento,
+  esquemaTipoBoost,
+  lerQuantidades,
   type Bola,
   type Hunt,
   type Item,
@@ -19,10 +30,28 @@ export interface Jogador {
   nick?: string;
   level?: number;
   gold?: number;
+  xp?: number;
+  xpNivel?: number;
+  xpProximo?: number;
   activeId?: string;
   huntSlug: string | null;
   noCentro: boolean;
   pokemons: PokemonJogador[];
+  itens: Record<string, number>;
+  bolas: Record<string, number>;
+}
+
+export interface TipoBoost {
+  chave: string;
+  mult: number;
+}
+
+export interface BonusJogador {
+  tiposBoost: TipoBoost[];
+  loja: { vipAte?: number; boosts: Record<string, number> };
+  guildBonusPct?: number;
+  guildBoostAte?: number;
+  farmEventoPct: number;
 }
 
 type Ouvinte = () => void;
@@ -30,14 +59,12 @@ type Ouvinte = () => void;
 const ehObjeto = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
 
-export function mesclarProfundo(
-  base: Record<string, unknown>,
-  delta: Record<string, unknown>,
-): Record<string, unknown> {
-  const saida: Record<string, unknown> = { ...base };
-  for (const [chave, valor] of Object.entries(delta)) {
-    const atual = saida[chave];
-    saida[chave] = ehObjeto(atual) && ehObjeto(valor) ? mesclarProfundo(atual, valor) : valor;
+function lerInstantes(bruto: unknown): Record<string, number> {
+  if (!ehObjeto(bruto)) return {};
+  const saida: Record<string, number> = {};
+  for (const [chave, valor] of Object.entries(bruto)) {
+    const n = Number(valor);
+    if (typeof valor !== 'boolean' && Number.isFinite(n)) saida[chave] = n;
   }
   return saida;
 }
@@ -58,11 +85,16 @@ function lerLista<T>(
 
 export class EstadoJogo {
   private bruto: Record<string, unknown> = {};
+  private readonly mesclador = new MescladorEstado();
   private _hunts: Hunt[] = [];
   private _tabelaTipos: TabelaTipos = {};
   private _bolas = new Map<number, Bola>();
   private _itensJogo = new Map<number, Item>();
+  private _tiposBoost: TipoBoost[] = [];
   private _recebeuWelcome = false;
+  private _parametrosCombate: ParametrosCombate = { ...PARAMETROS_COMBATE_PADRAO };
+  private _captura: ParametrosCaptura = { ...CAPTURA_PADRAO };
+  private _chanceShiny: number | null = null;
   private readonly ouvintes = new Set<Ouvinte>();
   private jogadorCache: Jogador | null = null;
 
@@ -82,6 +114,15 @@ export class EstadoJogo {
   }
   get itensJogo(): ReadonlyMap<number, Item> {
     return this._itensJogo;
+  }
+  get parametrosCombate(): ParametrosCombate {
+    return this._parametrosCombate;
+  }
+  get captura(): ParametrosCaptura {
+    return this._captura;
+  }
+  get chanceShiny(): number | null {
+    return this._chanceShiny;
   }
 
   huntPorSlug(slug: string | null | undefined): Hunt | undefined {
@@ -105,7 +146,7 @@ export class EstadoJogo {
         this.log.warn('Mensagem "estado" fora do formato esperado');
         return 'ignorada';
       }
-      this.bruto = mesclarProfundo(this.bruto, res.data.estado);
+      this.bruto = this.mesclador.mesclar(res.data.estado) ?? {};
       this.jogadorCache = null;
       this.notificar();
       return 'estado';
@@ -121,16 +162,21 @@ export class EstadoJogo {
       return;
     }
     const w = res.data;
-    const estado = w.estado ?? {};
-    this.bruto =
-      ehObjeto((msg as Record<string, unknown>).eu) && !ehObjeto(estado.eu)
-        ? { ...estado, eu: (msg as Record<string, unknown>).eu }
-        : { ...estado };
+    this.bruto = this.mesclador.mesclar(w.estado) ?? {};
     const hunts = lerLista(w.hunts, esquemaHunt);
     this._hunts = hunts.validos;
     this._tabelaTipos = w.tabelaTipos ?? {};
     this._bolas = new Map(lerLista(w.catalogoBolas, esquemaBola).validos.map((b) => [b.id, b]));
     this._itensJogo = new Map(lerLista(w.itensNossos, esquemaItem).validos.map((i) => [i.id, i]));
+    this._tiposBoost = lerLista(w.tiposBoost, esquemaTipoBoost).validos;
+    this._parametrosCombate = {
+      ...PARAMETROS_COMBATE_PADRAO,
+      ...(w.ampliacaoHunt !== undefined ? { ampliacaoHunt: w.ampliacaoHunt } : {}),
+      ...(w.multHpSelvagem !== undefined ? { multHpSelvagem: w.multHpSelvagem } : {}),
+      ...(w.multDanoSelvagem !== undefined ? { multDanoSelvagem: w.multDanoSelvagem } : {}),
+    };
+    this._captura = w.captura ?? { ...CAPTURA_PADRAO };
+    this._chanceShiny = w.chanceShiny ?? null;
     this._recebeuWelcome = true;
     this.jogadorCache = null;
     if (hunts.invalidos > 0)
@@ -145,7 +191,8 @@ export class EstadoJogo {
 
   jogador(): Jogador | null {
     if (this.jogadorCache) return this.jogadorCache;
-    const res = esquemaJogador.safeParse(this.bruto.eu);
+    if (Object.keys(this.bruto).length === 0) return null;
+    const res = esquemaJogador.safeParse(this.bruto);
     if (!res.success) return null;
     const j = res.data;
     const pokemons = lerLista(j.pokemons, esquemaPokemon).validos;
@@ -153,12 +200,35 @@ export class EstadoJogo {
       ...(j.nick !== undefined ? { nick: j.nick } : {}),
       ...(j.level !== undefined ? { level: j.level } : {}),
       ...(j.gold !== undefined ? { gold: j.gold } : {}),
+      ...(j.xp !== undefined ? { xp: j.xp } : {}),
+      ...(j.xpNivel !== undefined ? { xpNivel: j.xpNivel } : {}),
+      ...(j.xpProximo !== undefined ? { xpProximo: j.xpProximo } : {}),
       ...(j.activeId != null ? { activeId: String(j.activeId) } : {}),
       huntSlug: j.huntSlug ?? null,
       noCentro: j.noCentro ?? false,
       pokemons,
+      itens: lerQuantidades(j.items),
+      bolas: lerQuantidades(j.balls),
     };
     return this.jogadorCache;
+  }
+
+  bonus(agora: number): BonusJogador {
+    const res = esquemaBonusJogador.safeParse(this.bruto);
+    const b = res.success ? res.data : {};
+    const evento = esquemaEvento.safeParse(this.bruto.evento);
+    const farmEventoPct =
+      evento.success && evento.data.terminaEm > agora ? Math.max(0, evento.data.farmPct) : 0;
+    return {
+      tiposBoost: this._tiposBoost,
+      loja: {
+        ...(b.loja?.vipAte !== undefined ? { vipAte: b.loja.vipAte } : {}),
+        boosts: lerInstantes(b.loja?.boosts),
+      },
+      ...(b.guildBonusPct !== undefined ? { guildBonusPct: b.guildBonusPct } : {}),
+      ...(b.guild?.boostAte !== undefined ? { guildBoostAte: b.guild.boostAte } : {}),
+      farmEventoPct,
+    };
   }
 
   pokemonAtivo(): PokemonJogador | undefined {

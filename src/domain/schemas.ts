@@ -23,6 +23,7 @@ export const esquemaBola = z.object({
   name: z.string().optional(),
   nome: z.string().optional(),
   priceGold: z.coerce.number().optional().catch(undefined),
+  catchRate: z.coerce.number().optional().catch(undefined),
 });
 export type Bola = z.infer<typeof esquemaBola>;
 
@@ -34,6 +35,22 @@ export const esquemaItem = z.object({
 });
 export type Item = z.infer<typeof esquemaItem>;
 
+const CHAVES_STAT = ['hp', 'atk', 'def', 'spAtk', 'spDef', 'speed'] as const;
+
+function lerStats(
+  bruto: unknown,
+): Partial<Record<(typeof CHAVES_STAT)[number], number>> | undefined {
+  if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return undefined;
+  const saida: Partial<Record<(typeof CHAVES_STAT)[number], number>> = {};
+  for (const k of CHAVES_STAT) {
+    const v = Number((bruto as Record<string, unknown>)[k]);
+    if (Number.isFinite(v) && v >= 0) saida[k] = v;
+  }
+  return Object.keys(saida).length ? saida : undefined;
+}
+
+const mapaDeStats = z.unknown().transform(lerStats);
+
 export const esquemaPokemon = z.object({
   id,
   speciesId: z.coerce.number().optional().catch(undefined),
@@ -42,6 +59,26 @@ export const esquemaPokemon = z.object({
   nick: z.string().optional().catch(undefined),
   tipos: z.array(z.string()).optional().catch(undefined),
   shiny: z.boolean().optional().catch(undefined),
+  xp: z.coerce.number().optional().catch(undefined),
+  xpNivel: z.coerce.number().optional().catch(undefined),
+  xpProximo: z.coerce.number().optional().catch(undefined),
+  ivs: mapaDeStats.optional(),
+  quality: z.coerce.number().positive().optional().catch(undefined),
+  potencia: z.coerce.number().optional().catch(undefined),
+  refino: mapaDeStats.optional(),
+  stats: mapaDeStats.optional(),
+  maxHp: z.coerce.number().positive().optional().catch(undefined),
+  tmElemental: z
+    .string()
+    .transform((t) => t.toUpperCase())
+    .optional()
+    .catch(undefined),
+  tmFisico: z.boolean().optional().catch(undefined),
+  slot: z.coerce.number().nullable().optional().catch(undefined),
+  tmAoe: z
+    .unknown()
+    .transform((v) => (v === undefined || v === null ? undefined : !!v))
+    .optional(),
 });
 export type PokemonJogador = z.infer<typeof esquemaPokemon>;
 
@@ -49,11 +86,28 @@ export const esquemaJogador = z.object({
   nick: z.string().optional().catch(undefined),
   level: z.coerce.number().optional().catch(undefined),
   gold: z.coerce.number().optional().catch(undefined),
+  xp: z.coerce.number().optional().catch(undefined),
+  xpNivel: z.coerce.number().optional().catch(undefined),
+  xpProximo: z.coerce.number().optional().catch(undefined),
   activeId: id.nullable().optional().catch(undefined),
   huntSlug: z.string().nullable().optional().catch(undefined),
   noCentro: z.boolean().optional().catch(undefined),
   pokemons: z.array(z.unknown()).optional().catch(undefined),
+  items: z.unknown().optional(),
+  balls: z.unknown().optional(),
 });
+
+export function lerQuantidades(bruto: unknown): Record<string, number> {
+  if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return {};
+  const saida: Record<string, number> = {};
+  for (const [chave, valor] of Object.entries(bruto)) {
+    const id = idPositivo(chave);
+    const qtd = Number(valor);
+    if (id === null || !Number.isFinite(qtd) || qtd < 0) continue;
+    saida[String(id)] = Math.floor(qtd);
+  }
+  return saida;
+}
 export type JogadorBruto = z.infer<typeof esquemaJogador>;
 
 export const esquemaWelcome = z.object({
@@ -63,6 +117,38 @@ export const esquemaWelcome = z.object({
   tabelaTipos: esquemaTabelaTipos.optional().catch(undefined),
   catalogoBolas: z.array(z.unknown()).optional().catch(undefined),
   itensNossos: z.array(z.unknown()).optional().catch(undefined),
+  tiposBoost: z.array(z.unknown()).optional().catch(undefined),
+  ampliacaoHunt: z.coerce.number().positive().optional().catch(undefined),
+  multHpSelvagem: z.coerce.number().positive().optional().catch(undefined),
+  multDanoSelvagem: z.coerce.number().positive().optional().catch(undefined),
+  chanceShiny: z.coerce.number().min(0).max(1).optional().catch(undefined),
+  captura: z
+    .object({
+      base: z.coerce.number().positive(),
+      piso: z.coerce.number().min(0),
+      teto: z.coerce.number().positive(),
+      raridadeDiv: z.coerce.number().positive().catch(17),
+    })
+    .optional()
+    .catch(undefined),
+});
+
+export const esquemaTipoBoost = z.object({
+  chave: z.string().min(1),
+  mult: z.coerce.number().positive(),
+});
+
+const instante = z.coerce.number().optional().catch(undefined);
+
+export const esquemaBonusJogador = z.object({
+  loja: z.object({ vipAte: instante, boosts: z.unknown().optional() }).optional().catch(undefined),
+  guildBonusPct: instante,
+  guild: z.object({ boostAte: instante }).optional().catch(undefined),
+});
+
+export const esquemaEvento = z.object({
+  farmPct: z.coerce.number().catch(0),
+  terminaEm: z.coerce.number().catch(0),
 });
 
 export const esquemaEstadoMsg = z.object({
@@ -123,7 +209,27 @@ export const esquemasEvento = {
       .object({ shiny: z.boolean().optional().catch(undefined) })
       .optional()
       .catch(undefined),
+    vendidoAuto: numero.optional(),
   }),
+  ataque: z.object({
+    k: z.literal('ataque'),
+    por: z.string().catch(''),
+    tipo: z.string().optional().catch(undefined),
+    dano: numero.optional(),
+    ef: numero.optional(),
+  }),
+  bossEntrou: z.object({
+    k: z.literal('bossEntrou'),
+    entrada: z
+      .object({
+        itemId: id.optional().catch(undefined),
+        qtd: z.coerce.number().optional().catch(undefined),
+      })
+      .optional()
+      .catch(undefined),
+  }),
+  xpPerdido: z.object({ k: z.literal('xpPerdido'), qtd: numero.optional() }),
+  fugiu: z.object({ k: z.literal('fugiu') }),
   cura: z.object({ k: z.literal('cura'), itemId: id.optional().catch(undefined) }),
   revive: z.object({ k: z.literal('revive'), itemId: id.optional().catch(undefined) }),
 } as const;

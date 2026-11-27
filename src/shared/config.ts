@@ -16,6 +16,8 @@ export const esquemaConfig = z.object({
     origem: z.url(),
     assetsEspecies: z.array(z.string().startsWith('/')).min(1),
     assetItens: z.string().startsWith('/'),
+    assetOverrides: z.string().startsWith('/'),
+    assetGolpes: z.string().startsWith('/'),
   }),
 });
 

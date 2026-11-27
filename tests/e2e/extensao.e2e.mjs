@@ -71,7 +71,7 @@ async function principal() {
           enviar({ t: 'batalha', ev: b.ev });
           enviar({ t: 'campo', mobs: [] });
         }
-        enviar({ t: 'estado', estado: { eu: { gold: 9999 } } });
+        enviar({ t: 'estado', estado: { gold: 9999 } });
       });
     });
 
@@ -135,9 +135,30 @@ async function principal() {
       'o DOM do jogo não pode mudar',
     );
 
-    console.log(
-      `E2E OK · servidor recebeu ${recebidosPeloServidor.length} mensagem · jogo recebeu ${recebidosPeloJogo}/${enviadosPeloServidor}`,
+    const resumo = `servidor recebeu ${recebidosPeloServidor.length} mensagem · jogo recebeu ${recebidosPeloJogo}/${enviadosPeloServidor}`;
+
+    await painel.getByRole('tab', { name: 'Histórico' }).click();
+    assert.match(
+      await painel.innerText(),
+      /Nenhuma sessão salva ainda|sessão/,
+      'a aba Histórico deve abrir',
     );
+    await painel.getByRole('button', { name: 'Minimizar' }).click();
+    assert.equal(await painel.locator('.conteudo').count(), 0, 'minimizar esconde o conteúdo');
+    await pagina.waitForTimeout(300);
+    await pagina.reload();
+    await botao.waitFor({ timeout: 15000 });
+    await botao.click();
+    await painel.waitFor();
+    assert.equal(
+      await painel.locator('.conteudo').count(),
+      0,
+      'o painel deve continuar minimizado depois de recarregar (chrome.storage)',
+    );
+    await painel.getByRole('button', { name: 'Restaurar' }).click();
+    assert.match(await painel.innerText(), /Histórico/, 'restaura na última aba usada');
+
+    console.log(`E2E OK · ${resumo}`);
   } finally {
     await contexto.close();
     await rm(perfil, { recursive: true, force: true });

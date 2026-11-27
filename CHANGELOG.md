@@ -5,6 +5,64 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.5.0] - 2026-11-26
+
+### Adicionado
+
+- Simulador de combate com as fórmulas do jogo: stats (IV, qualidade, potência, shiny, refino ou stats prontos do servidor), dano, efetividade ampliada na hunt, HP dos selvagens, recargas por poder e speed, intervalo global, Investida, Z-Move e TM de área. Estima golpes, segundos por abate, abates/h, XP/h e gold/h do seu pokémon em cada hunt.
+- Calibração da simulação pelas sessões reais (cada sessão passa a registrar o pokémon ativo).
+- Ranking: hunts não visitadas com selo `simulado`, segundos e golpes por abate.
+- Aba **Time**: o time na hunt atual e as melhores hunts simuladas por pokémon. A sugestão do melhor pokémon vem da simulação.
+- Aba **Progresso**: meta de nível com tempo estimado (curva de XP do jogo), evolução do ativo, pokémons travados pelo nível do treinador, custo de refino.
+- Aba **Economia**: chance de captura por bola e espécie, bolas e gold por captura, melhor bola, shiny por arremessos, pedras/h e ovo shiny.
+- Lucro real/h somando as capturas vendidas automaticamente (`vendidoAuto`), que o painel do jogo não soma.
+- Golpes reais das espécies: `creatures-audit-overrides.json` e `golpes-planilhas.mjs` (lido como texto), mais os golpes 600 das formas finais.
+- Diagnóstico em Opções dos dados de combate do ativo.
+
+### Alterado
+
+- Drops especiais mostram a frequência ("1 a cada N abates") em vez do valor NPC.
+- Sessões em `schemaVersion` 3 com `vendasAuto` e `pokemon`.
+
+### Corrigido
+
+- O valor NPC dos drops era enganoso: desde 15/10/2026 o loot não vira gold e o NPC não compra tokens e fragmentos.
+- Parser de golpes: uma tabela vazia engolia a seguinte (achado em teste).
+
+## [0.4.0] - 2026-11-26
+
+### Adicionado
+
+- Aba **Histórico**: últimas 50 sessões salvas (hunt, data, duração, XP/h, lucro/h, desmaios), com filtro por hunt e resumo do filtro.
+- Previsão do **próximo nível** do treinador e do pokémon ativo (progresso, XP restante e tempo no ritmo da sessão), com os campos `xp`, `xpNivel` e `xpProximo` do estado.
+- Sessão conta desmaios do seu pokémon (`morte` com `quem: 'jogador'`), XP perdido (`xpPerdido`) e fugas (`fugiu`), com a taxa de captura.
+- Painel arrastável pelo cabeçalho e minimizável; posição, estado minimizado e última aba ficam salvos em `chrome.storage.local` (`pokeidleHelper.ui`), validados ao carregar.
+
+### Alterado
+
+- Sessões salvas passam para `schemaVersion` 3; as anteriores são completadas ao carregar.
+
+## [0.3.0] - 2026-11-26
+
+### Adicionado
+
+- Alerta com o dano real recebido: fração de golpes super efetivos (`ef >= 2`) e dano médio dos selvagens, a partir de 20 golpes; antes disso continua o alerta teórico por tipos.
+- Valor NPC dos drops especiais por hora e lista de drops da sessão, fora do lucro líquido. Drops sem `itemId` são avaliados pelo nome no catálogo.
+- Autonomia: tempo até acabar cada poção, revive e bola no ritmo da sessão, com o item que acaba primeiro.
+- Estimativas do ranking com VIP, boosts da loja, bônus e boost da guild e evento de farm ativos, como no `hunt-analyser.mjs` do jogo, com a lista de bônus aplicados.
+- Registro do `bossEntrou` (tokens gastos para entrar num boss), como o jogo.
+- Inventário (`items`, `balls`) lido do estado do jogador.
+
+### Alterado
+
+- A sugestão do melhor pokémon do time agora pesa o dano recebido e o nível do pokémon em relação ao da hunt.
+- Sessões salvas passam para `schemaVersion` 2; as da versão 1 são completadas ao carregar.
+
+### Corrigido
+
+- O estado do jogador era lido de um envelope `estado.eu` que o jogo não manda: o `estado` já é o jogador, com parciais `cheio`/`pkMud`/`pkFora`. Com isso o helper não achava o pokémon ativo, o filtro "até o nível do ativo" não filtrava nada e os tipos apareciam como `?`. O estado agora é reconstruído com a mesma lógica do `shared/estado-delta.mjs` do jogo.
+- O filtro por nível avisa quando o nível do ativo ainda não é conhecido e mostra o nível usado.
+
 ## [0.2.0] - 2026-11-26
 
 ### Adicionado

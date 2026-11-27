@@ -1,7 +1,9 @@
 import type { Logger } from '../shared/logger';
 import { idPositivo, lerEvento, type Evento } from './schemas';
 
-export const VERSAO_SESSAO = 1;
+export const VERSAO_SESSAO = 3;
+export const EF_SUPER_EFETIVO = 2;
+const ENTRADA_BOSS_PADRAO = { itemId: 70000, qtd: 1 };
 
 export interface Sessao {
   id: string;
@@ -21,9 +23,24 @@ export interface Sessao {
   bolas: Record<string, number>;
   pocoes: Record<string, number>;
   revives: Record<string, number>;
+  tokens: Record<string, number>;
   drops: Record<string, { nome?: string; qtd: number }>;
   spawns: Record<string, number>;
+  golpesRecebidos: number;
+  golpesSuperEfetivos: number;
+  danoRecebido: number;
+  desmaios: number;
+  xpPerdido: number;
+  fugas: number;
+  vendasAuto: number;
+  pokemon?: PokemonDaSessao;
   aberta: boolean;
+}
+
+export interface PokemonDaSessao {
+  id: string;
+  speciesId?: number;
+  level?: number;
 }
 
 export interface OpcoesRastreador {
@@ -73,9 +90,32 @@ export function novaSessao(slug: string, nome: string, inicio: number): Sessao {
     bolas: {},
     pocoes: {},
     revives: {},
+    tokens: {},
     drops: {},
     spawns: {},
+    golpesRecebidos: 0,
+    golpesSuperEfetivos: 0,
+    danoRecebido: 0,
+    desmaios: 0,
+    xpPerdido: 0,
+    fugas: 0,
+    vendasAuto: 0,
     aberta: true,
+  };
+}
+
+export function normalizarSessao(s: Sessao): Sessao {
+  return {
+    ...s,
+    schemaVersion: VERSAO_SESSAO,
+    tokens: s.tokens ?? {},
+    golpesRecebidos: s.golpesRecebidos ?? 0,
+    golpesSuperEfetivos: s.golpesSuperEfetivos ?? 0,
+    danoRecebido: s.danoRecebido ?? 0,
+    desmaios: s.desmaios ?? 0,
+    xpPerdido: s.xpPerdido ?? 0,
+    fugas: s.fugas ?? 0,
+    vendasAuto: s.vendasAuto ?? 0,
   };
 }
 
@@ -124,8 +164,8 @@ export class RastreadorSessao {
         this.definirHunt(ev.slug, ev.nome, em);
         continue;
       }
-      if (!this.atual || !EVENTOS_DE_COMBATE.has(ev.k)) continue;
-      this.registrarAtividade(em);
+      if (!this.atual) continue;
+      if (EVENTOS_DE_COMBATE.has(ev.k)) this.registrarAtividade(em);
       this.contar(this.atual, ev);
     }
   }
@@ -146,6 +186,7 @@ export class RastreadorSessao {
         somar(s.spawns, ev.speciesId);
         break;
       case 'morte':
+        if (ev.quem === 'jogador') s.desmaios++;
         if (ev.quem !== 'selvagem') break;
         s.abates++;
         s.xpTreinador += ev.xpTreinador ?? ev.xp ?? 0;
@@ -166,12 +207,30 @@ export class RastreadorSessao {
       case 'capturado':
         s.capturas++;
         if (ev.pokemon?.shiny) s.shinies++;
+        s.vendasAuto += Math.max(0, ev.vendidoAuto ?? 0);
         break;
       case 'cura':
         somar(s.pocoes, ev.itemId);
         break;
       case 'revive':
         somar(s.revives, ev.itemId);
+        break;
+      case 'xpPerdido':
+        s.xpPerdido += Math.max(0, ev.qtd ?? 0);
+        break;
+      case 'fugiu':
+        s.fugas++;
+        break;
+      case 'bossEntrou': {
+        const entrada = ev.entrada ?? ENTRADA_BOSS_PADRAO;
+        somar(s.tokens, entrada.itemId ?? ENTRADA_BOSS_PADRAO.itemId, entrada.qtd ?? 1);
+        break;
+      }
+      case 'ataque':
+        if (ev.por === 'jogador') break;
+        s.golpesRecebidos++;
+        s.danoRecebido += Math.max(0, ev.dano ?? 0);
+        if ((ev.ef ?? 0) >= EF_SUPER_EFETIVO) s.golpesSuperEfetivos++;
         break;
       default:
         break;
@@ -191,6 +250,10 @@ export class RastreadorSessao {
       atual.qtd += Math.max(1, Math.floor(d.qtd ?? 1));
       s.drops[chave] = atual;
     }
+  }
+
+  registrarPokemon(p: PokemonDaSessao): void {
+    if (this.atual && !this.atual.pokemon) this.atual.pokemon = { ...p };
   }
 
   checkpoint(): void {

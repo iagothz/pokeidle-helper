@@ -1,6 +1,6 @@
 import type { Hunt } from '../domain/schemas';
 
-export const VERSAO_FORMULAS = '1.488.1';
+export const VERSAO_FORMULAS = '1.492.0';
 
 const NIVEL_ANCORA = 150;
 const XP_ANCORA = 0.6 * NIVEL_ANCORA ** 2;
@@ -48,8 +48,8 @@ export function ouroPorAbate(nivel: number, bonusLootPct = 0): number {
   return base + loot;
 }
 
-export function mediaPorAbate(hunt: Hunt): { xp: number; gold: number } {
-  return { xp: xpDoNivel(hunt.nivel), gold: ouroPorAbate(hunt.nivel) };
+export function mediaPorAbate(hunt: Hunt, bonusLootPct = 0): { xp: number; gold: number } {
+  return { xp: xpDoNivel(hunt.nivel), gold: ouroPorAbate(hunt.nivel, bonusLootPct) };
 }
 
 export function abatesPorHoraTeorico(hunt: Hunt): number {

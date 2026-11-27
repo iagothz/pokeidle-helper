@@ -13,3 +13,15 @@ Faça com o Brave Shields **ligado**.
 - [ ] Ir para uma hunt com tipos resistentes ao ativo e ver o alerta de desvantagem.
 - [ ] Exportar dados e logs e conferir que não há `token`, `email`, `cpf` ou `carteira` nos arquivos.
 - [ ] Desligar a extensão, recarregar a página e confirmar que o jogo funciona normalmente.
+- [ ] Na aba **Hunts**, marcar "até o nível do ativo" e confirmar que o nível entre parênteses é o do seu pokémon ativo e que hunts acima dele somem.
+- [ ] Com VIP ou boost ativo, ver a lista de bônus aplicados acima do ranking.
+- [ ] Na aba **Sessão**, depois de 5 min usando poções, conferir a autonomia com o estoque mostrado na mochila do jogo.
+- [ ] Conferir "Próximo nível" com a previsão do placar de economia do jogo.
+- [ ] Apanhar até 20 golpes e ver o alerta com a fração real de super efetivos.
+- [ ] Arrastar o painel, minimizar, recarregar a página e ver posição, estado e aba mantidos.
+- [ ] Trocar de hunt depois de 3 min e ver a sessão na aba **Histórico**.
+- [ ] Em **Opções**, ver "Dados de combate do ativo: IVs sim · qualidade sim · stats sim" e "Golpes da espécie do ativo" maior que 2. Se aparecer "não", o simulador usa médias: exportar os logs.
+- [ ] Na aba **Time**, comparar os abates/h simulados do ativo com o painel SESSÃO depois de 5 min (a calibração aparece no topo da aba).
+- [ ] Na aba **Economia**, comparar a chance da bola com a tabela de captura da ficha da espécie no jogo.
+- [ ] Na aba **Progresso**, digitar um nível-alvo e conferir o XP que falta com a ficha do jogo.
+- [ ] Capturar com venda automática ligada e ver "Vendas auto/h" subir na aba **Sessão**.

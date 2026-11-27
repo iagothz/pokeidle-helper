@@ -71,6 +71,24 @@ export function avaliarHunt(
 export interface SugestaoTime {
   pokemon: PokemonJogador;
   avaliacao: AvaliacaoTipo;
+  pontuacao: number;
+}
+
+const DEFENSIVA_MINIMA = 0.25;
+const FATOR_NIVEL_MINIMO = 0.01;
+
+export function pontuarParaHunt(
+  avaliacao: Pick<AvaliacaoTipo, 'ofensiva' | 'defensiva'>,
+  nivel: number | undefined,
+  hunt: Pick<Hunt, 'nivel'>,
+): number | null {
+  if (avaliacao.ofensiva === null) return null;
+  const defensiva = Math.max(avaliacao.defensiva ?? 1, DEFENSIVA_MINIMA);
+  const fatorNivel =
+    nivel === undefined || hunt.nivel <= 0 || nivel >= hunt.nivel
+      ? 1
+      : Math.sqrt(Math.max(nivel / hunt.nivel, FATOR_NIVEL_MINIMO));
+  return (avaliacao.ofensiva / Math.sqrt(defensiva)) * fatorNivel;
 }
 
 export function melhorDoTime(
@@ -82,14 +100,9 @@ export function melhorDoTime(
   let melhor: SugestaoTime | null = null;
   for (const pokemon of time) {
     const avaliacao = avaliarHunt(hunt, tiposDoPokemon(pokemon, catalogo), catalogo, tabela);
-    if (avaliacao.ofensiva === null) continue;
-    const atual = melhor?.avaliacao;
-    const ehMelhor =
-      !atual ||
-      avaliacao.ofensiva > (atual.ofensiva ?? 0) ||
-      (avaliacao.ofensiva === atual.ofensiva &&
-        (avaliacao.defensiva ?? 0) < (atual.defensiva ?? 0));
-    if (ehMelhor) melhor = { pokemon, avaliacao };
+    const pontuacao = pontuarParaHunt(avaliacao, pokemon.level, hunt);
+    if (pontuacao === null) continue;
+    if (!melhor || pontuacao > melhor.pontuacao) melhor = { pokemon, avaliacao, pontuacao };
   }
   return melhor;
 }

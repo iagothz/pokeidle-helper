@@ -23,7 +23,8 @@ export interface Taxas {
   abatesMin: number;
   custoH: number;
   lucroLiquidoH: number;
-  dropsValorH: number;
+  vendasAutoH: number;
+  lucroRealH: number;
   custoPorAbate: number;
   custos: Custos;
 }
@@ -39,7 +40,7 @@ type Contadores = Pick<
   | 'pocoes'
   | 'revives'
   | 'drops'
->;
+> & { vendasAuto?: number };
 
 const somaPreco = (mapa: Record<string, number>, preco: (id: number) => number) =>
   Object.entries(mapa).reduce((t, [id, qtd]) => t + Math.max(0, preco(Number(id)) || 0) * qtd, 0);
@@ -52,13 +53,6 @@ export function custosDe(
   const pocoes = somaPreco(c.pocoes, precos.item);
   const revives = somaPreco(c.revives, precos.item);
   return { bolas, pocoes, revives, total: bolas + pocoes + revives };
-}
-
-export function valorDrops(drops: Contadores['drops'], precos: Precos): number {
-  return Object.entries(drops).reduce((t, [chave, d]) => {
-    if (chave.startsWith('nome:')) return t;
-    return t + Math.max(0, precos.item(Number(chave)) || 0) * d.qtd;
-  }, 0);
 }
 
 export function taxasDe(c: Contadores, precos: Precos): Taxas {
@@ -74,7 +68,8 @@ export function taxasDe(c: Contadores, precos: Precos): Taxas {
     abatesMin: porHora(c.abates) / 60,
     custoH: porHora(custos.total),
     lucroLiquidoH: porHora(c.gold - custos.total),
-    dropsValorH: porHora(valorDrops(c.drops, precos)),
+    vendasAutoH: porHora(c.vendasAuto ?? 0),
+    lucroRealH: porHora(c.gold + (c.vendasAuto ?? 0) - custos.total),
     custoPorAbate: c.abates > 0 ? custos.total / c.abates : 0,
     custos,
   };
@@ -96,8 +91,10 @@ export function agregar(sessoes: readonly Sessao[]): Contadores & { sessoes: num
     pocoes: {},
     revives: {},
     drops: {},
+    vendasAuto: 0,
   };
   for (const s of sessoes) {
+    total.vendasAuto = (total.vendasAuto ?? 0) + (s.vendasAuto ?? 0);
     total.msAtivo += s.msAtivo;
     total.xpTreinador += s.xpTreinador;
     total.xpPokemon += s.xpPokemon;

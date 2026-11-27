@@ -2,9 +2,14 @@
 
 Extensão para Brave (e outros navegadores Chromium) que acompanha suas hunts no [PokeIdle](https://pokeidle.io/app) e mostra, num painel sobre o jogo:
 
-- **Sessão atual:** XP/h (pokémon e treinador), gold/h, abates/min, gasto com poções, revives e bolas, e lucro líquido por hora.
-- **Ranking de hunts:** por lucro líquido/h ou XP/h. Usa seus dados reais quando você já caçou na hunt e uma estimativa calibrada pelo seu ritmo quando ainda não caçou.
-- **Dicas de tipo:** vantagem ou desvantagem do pokémon ativo contra a hunt, alerta quando os selvagens acertam super efetivo e qual pokémon do seu time rende mais ali.
+- **Sessão atual:** XP/h (pokémon e treinador), gold/h, abates/min, gasto com poções, revives e bolas, lucro líquido (como o jogo) e **lucro real** (somando as capturas vendidas automaticamente, que o jogo não soma), desmaios, XP perdido, taxa de captura e frequência dos drops especiais.
+- **Autonomia:** quanto tempo dá para ficar na hunt com as poções e revives que você tem, no ritmo de consumo da sessão, e qual item acaba primeiro.
+- **Simulador de combate:** reproduz as fórmulas do jogo (stats, dano, efetividade ampliada na hunt, HP dos selvagens, recargas por poder e speed, Investida, Z-Move, TM de área) para estimar quantos golpes e segundos o **seu** pokémon leva por abate em cada hunt. Pokémon fraco para a hunt mata devagar e o XP/h cai, como no jogo. A simulação é calibrada pelo seu ritmo real.
+- **Time:** XP/h, abates/h, golpes por abate e quanto tempo cada pokémon do time aguenta na hunt atual, e as melhores hunts simuladas para qualquer pokémon seu.
+- **Ranking de hunts:** por lucro líquido/h ou XP/h, com filtro pelo nível do pokémon ativo. Usa seus dados reais quando você já caçou na hunt e a simulação do seu ativo (com VIP, boosts e bônus de guild ativos) quando ainda não caçou.
+- **Progresso:** tempo até qualquer nível-alvo (curva de XP do jogo), quanto falta para o ativo evoluir, pokémons travados pelo nível do treinador e quando liberam, custo do próximo refino.
+- **Economia:** chance de captura por bola de cada espécie da hunt, bolas e gold por captura e a melhor bola, arremessos esperados por shiny, pedras de evolução por hora e tempo até o próximo ovo shiny.
+- **Dicas de tipo:** vantagem ou desvantagem do pokémon ativo contra a hunt, alerta com a fração real de golpes super efetivos recebidos e qual pokémon do seu time rende mais ali.
 
 A extensão é **somente leitura**: ela observa as mensagens que o jogo já recebe e não envia nada ao servidor.
 
@@ -13,7 +18,7 @@ A extensão é **somente leitura**: ela observa as mensagens que o jogo já rece
 A seção 5 dos [Termos](https://pokeidle.io/terms) permite automações, desde que não explorem falhas, não burlem limites e não sobrecarreguem o servidor. O helper fica bem longe disso:
 
 - não envia mensagens pelo WebSocket nem faz requisições aos endpoints do jogo (há teste automatizado para isso);
-- só baixa os catálogos estáticos que o próprio jogo já usa (`/assets/creatures*.json` e `/assets/items.json`);
+- só baixa os arquivos estáticos que o próprio jogo já carrega: `/assets/creatures*.json`, `/assets/creatures-audit-overrides.json`, `/assets/items.json` e `/shared/golpes-planilhas.mjs`. Este último é **lido como texto** para extrair a tabela de golpes; o helper nunca executa código do jogo;
 - não automatiza nenhuma ação.
 
 Não use VPN, VPS nem proxy para jogar; os Termos proíbem.
@@ -46,14 +51,20 @@ O helper precisa estar ativo **antes** do login, porque os dados de hunts chegam
 
 ## Uso
 
-- **PH** abre e fecha o painel. O botão fica laranja quando há um aviso ou desvantagem de tipo.
-- **Sessão:** métricas da hunt atual. Só o tempo ativo conta: pausas maiores que 60 s entre eventos de batalha são descontadas.
+- **PH** abre e fecha o painel. O botão fica laranja quando há um aviso, desvantagem de tipo ou muitos golpes super efetivos recebidos.
+- Arraste o painel pelo cabeçalho e use **–** / **+** para minimizar e restaurar. Posição, estado e última aba ficam salvos.
+- **Sessão:** métricas da hunt atual, desmaios, XP perdido, taxa de captura, próximo nível do treinador e do ativo, autonomia de consumíveis e drops. Só o tempo ativo conta: pausas maiores que 60 s entre eventos de batalha são descontadas.
 - **Hunts:** o selo de cada linha diz de onde vem o número:
   - `real`: média das suas sessões, com pelo menos 15 min acumulados;
   - `pouca amostra`: real, mas com menos de 15 min;
+  - `simulado`: simulação de combate do seu pokémon ativo naquela hunt, calibrada pelo seu ritmo real; mostra segundos e golpes por abate;
   - `estimado`: fórmulas do jogo ajustadas pelo seu ritmo médio nas hunts reais;
   - `teto teórico`: fórmulas do jogo sem ajuste (antes de você ter qualquer hunt medida).
-- **Opções:** exportar seus dados e os logs em JSON, mudar o nível de log e limpar o histórico.
+- **Time:** simulação do seu time na hunt atual (XP/h, abates/h, golpes e segundos por abate, quanto aguenta sem poção) e as melhores hunts para o pokémon que você escolher.
+- **Progresso:** metas de nível com tempo estimado, evolução do ativo, pokémons travados pelo nível do treinador e custo de refino.
+- **Economia:** captura por bola e espécie, melhor bola, shiny, pedras/h e ovo shiny da hunt atual.
+- **Histórico:** as últimas 50 sessões salvas, com filtro por hunt e resumo do período filtrado.
+- **Opções:** exportar seus dados e os logs em JSON, mudar o nível de log, limpar o histórico e conferir se o jogo manda os dados de combate do seu ativo.
 
 Sessões com menos de 3 min ativos são descartadas. O custo dos consumíveis usa o preço de NPC (`npcPrice`) e o `priceGold` das bolas, o mesmo critério do painel SESSÃO do jogo.
 
@@ -111,10 +122,15 @@ Mais detalhes em [`docs/arquitetura.md`](docs/arquitetura.md) e [`docs/protocolo
 
 ## Privacidade
 
-Tudo fica no seu navegador: as sessões e os logs no IndexedDB de `pokeidle.io` e a configuração no `chrome.storage.local`. Antes de qualquer processamento, a captura remove campos como `token`, `email`, `cpf`, `carteira` e `ip`. Nada é enviado a lugar nenhum.
+Tudo fica no seu navegador: as sessões e os logs no IndexedDB de `pokeidle.io` e a configuração e as preferências do painel (posição, minimizado, aba) no `chrome.storage.local`. Antes de qualquer processamento, a captura remove campos como `token`, `email`, `cpf`, `carteira` e `ip`. Nada é enviado a lugar nenhum.
 
 ## Limitações conhecidas
 
 - O formato das mensagens foi conferido na versão 1.492.0 do jogo. Quando o jogo é atualizado, o painel avisa que a versão mudou e mostra a nova em **Opções → Versão do jogo**. Mudanças no protocolo podem fazer o helper ignorar dados; isso aparece em **Opções → Eventos ignorados** e nos logs.
-- As estimativas para hunts não visitadas assumem que seu ritmo relativo se mantém entre hunts e não consideram boosts, VIP ou bônus de guild.
-- Valores de drops especiais (tokens, fragmentos) não entram no lucro líquido.
+- O simulador usa as fórmulas do código compartilhado do jogo, mas os IVs e a qualidade dos selvagens são sorteados no servidor: o helper usa a média (IV 16,5 e qualidade ≈ 1,18) e corrige pela calibração com as suas sessões (mediana de real ÷ simulado). Prey, bestiário, dia sazonal e pódio de ginásio não entram no dano. Com TM de área, supõe metade da onda atingida por golpe.
+- As estimativas aplicam os bônus ativos **agora** (VIP, boosts, guild, evento de farm); as linhas `real` ficam com os bônus que você tinha quando caçou.
+- Desde 15/10/2026 o loot de itens não vira gold e o NPC não compra os drops especiais (tokens, fragmentos): o helper mostra só a frequência deles.
+- A chance de captura não inclui boosts aplicados pelo servidor (Capture Boost, Kick, Prey, Safari); compare com a sua taxa real mostrada na mesma aba.
+- A autonomia supõe o ritmo de consumo atual e só aparece depois de 5 min ativos e 3 usos de cada item; bolas aparecem na tabela mas não limitam a permanência.
+- A sugestão do melhor pokémon do time vem da simulação. Sem dados de espécie, cai para uma heurística por tipo (dano causado ÷ √dano recebido, com redutor de nível).
+- Em **Opções → Dados de combate do ativo** dá para ver se o jogo está mandando IVs, qualidade e stats do seu ativo; sem eles o simulador usa médias.

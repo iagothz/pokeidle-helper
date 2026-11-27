@@ -15,6 +15,8 @@
       "/assets/creatures-novos.json",
       "/assets/creatures-outland-novos.json"
     ],
-    "assetItens": "/assets/items.json"
+    "assetItens": "/assets/items.json",
+    "assetOverrides": "/assets/creatures-audit-overrides.json",
+    "assetGolpes": "/shared/golpes-planilhas.mjs"
   }
 }

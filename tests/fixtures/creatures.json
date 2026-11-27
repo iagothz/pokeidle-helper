@@ -6,10 +6,34 @@
       "type1": "FIRE",
       "type2": null,
       "huntLevel": 10,
+      "baseHp": 39,
+      "baseAtk": 52,
+      "baseDef": 43,
+      "baseSpAtk": 60,
+      "baseSpDef": 50,
+      "baseSpeed": 65,
+      "evolvesToId": 5,
+      "evolveLevel": 40,
+      "priceNpc": 3000,
       "attacks": [
-        { "name": "Ember", "type": "FIRE" },
-        { "name": "Scratch", "type": "NORMAL" }
-      ]
+        {
+          "name": "Ember",
+          "type": "FIRE",
+          "category": "SPECIAL",
+          "power": 40,
+          "cooldownMs": 10000,
+          "learnLevel": 1
+        },
+        {
+          "name": "Scratch",
+          "type": "NORMAL",
+          "category": "PHYSICAL",
+          "power": 40,
+          "cooldownMs": 10000,
+          "learnLevel": 1
+        }
+      ],
+      "loot": []
     },
     {
       "pokeId": 7,
@@ -17,10 +41,34 @@
       "type1": "WATER",
       "type2": null,
       "huntLevel": 10,
+      "baseHp": 44,
+      "baseAtk": 48,
+      "baseDef": 65,
+      "baseSpAtk": 50,
+      "baseSpDef": 64,
+      "baseSpeed": 43,
+      "evolvesToId": 8,
+      "evolveLevel": 40,
+      "priceNpc": 3000,
       "attacks": [
-        { "name": "Water Gun", "type": "WATER" },
-        { "name": "Tackle", "type": "NORMAL" }
-      ]
+        {
+          "name": "Water Gun",
+          "type": "WATER",
+          "category": "SPECIAL",
+          "power": 40,
+          "cooldownMs": 10000,
+          "learnLevel": 1
+        },
+        {
+          "name": "Tackle",
+          "type": "NORMAL",
+          "category": "PHYSICAL",
+          "power": 40,
+          "cooldownMs": 10000,
+          "learnLevel": 1
+        }
+      ],
+      "loot": []
     },
     {
       "pokeId": 43,
@@ -28,10 +76,34 @@
       "type1": "GRASS",
       "type2": "POISON",
       "huntLevel": 5,
+      "baseHp": 45,
+      "baseAtk": 50,
+      "baseDef": 55,
+      "baseSpAtk": 75,
+      "baseSpDef": 65,
+      "baseSpeed": 30,
+      "evolvesToId": 44,
+      "evolveLevel": 30,
+      "priceNpc": 80,
       "attacks": [
-        { "name": "Absorb", "type": "GRASS" },
-        { "name": "Acid", "type": "POISON" }
-      ]
+        {
+          "name": "Absorb",
+          "type": "GRASS",
+          "category": "SPECIAL",
+          "power": 20,
+          "cooldownMs": 10000,
+          "learnLevel": 1
+        },
+        {
+          "name": "Acid",
+          "type": "POISON",
+          "category": "SPECIAL",
+          "power": 40,
+          "cooldownMs": 10000,
+          "learnLevel": 1
+        }
+      ],
+      "loot": []
     },
     {
       "pokeId": 69,
@@ -39,10 +111,34 @@
       "type1": "GRASS",
       "type2": "POISON",
       "huntLevel": 1,
+      "baseHp": 50,
+      "baseAtk": 75,
+      "baseDef": 35,
+      "baseSpAtk": 70,
+      "baseSpDef": 30,
+      "baseSpeed": 40,
+      "evolvesToId": 70,
+      "evolveLevel": 30,
+      "priceNpc": 80,
       "attacks": [
-        { "name": "Vine Whip", "type": "GRASS" },
-        { "name": "Poison Powder", "type": "POISON" }
-      ]
+        {
+          "name": "Vine Whip",
+          "type": "GRASS",
+          "category": "PHYSICAL",
+          "power": 45,
+          "cooldownMs": 10000,
+          "learnLevel": 1
+        },
+        {
+          "name": "Poison Powder",
+          "type": "POISON",
+          "category": "SPECIAL",
+          "power": 15,
+          "cooldownMs": 10000,
+          "learnLevel": 1
+        }
+      ],
+      "loot": []
     },
     {
       "pokeId": 74,
@@ -50,10 +146,34 @@
       "type1": "ROCK",
       "type2": "GROUND",
       "huntLevel": 10,
+      "baseHp": 40,
+      "baseAtk": 80,
+      "baseDef": 100,
+      "baseSpAtk": 30,
+      "baseSpDef": 30,
+      "baseSpeed": 20,
+      "evolvesToId": 75,
+      "evolveLevel": 40,
+      "priceNpc": 300,
       "attacks": [
-        { "name": "Rock Throw", "type": "ROCK" },
-        { "name": "Mud Slap", "type": "GROUND" }
-      ]
+        {
+          "name": "Rock Throw",
+          "type": "ROCK",
+          "category": "PHYSICAL",
+          "power": 50,
+          "cooldownMs": 10000,
+          "learnLevel": 1
+        },
+        {
+          "name": "Mud Slap",
+          "type": "GROUND",
+          "category": "SPECIAL",
+          "power": 20,
+          "cooldownMs": 10000,
+          "learnLevel": 1
+        }
+      ],
+      "loot": []
     }
   ]
 }

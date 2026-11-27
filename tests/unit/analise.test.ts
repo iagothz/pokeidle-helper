@@ -8,11 +8,12 @@ import {
   xpDoNivel,
 } from '../../src/analysis/formulasJogo';
 import { efetividade, melhorEfetividade } from '../../src/analysis/tipos';
-import { agregar, custosDe, mediana, taxasDe, valorDrops } from '../../src/analysis/taxas';
+import { agregar, custosDe, mediana, taxasDe } from '../../src/analysis/taxas';
 import {
   avaliarHunt,
   classificar,
   melhorDoTime,
+  pontuarParaHunt,
   tiposDoPokemon,
 } from '../../src/analysis/dicasTipo';
 import { montarRanking, ordenar } from '../../src/analysis/ranking';
@@ -26,8 +27,8 @@ const tabela = welcome.tabelaTipos as TabelaTipos;
 const hunts = welcome.hunts.filter((h) => 'slug' in h) as unknown as Hunt[];
 const bellsprout = hunts[0]!;
 const geodude = hunts[2]!;
-const charmander = welcome.estado.eu.pokemons[0]!;
-const squirtle = welcome.estado.eu.pokemons[1]!;
+const charmander = welcome.estado.pokemons[0]!;
+const squirtle = welcome.estado.pokemons[1]!;
 
 describe('fórmulas do jogo', () => {
   it('reproduz os valores observados no nível 1 (8 XP, 41 de gold com 5 de loot)', () => {
@@ -87,6 +88,7 @@ describe('taxas e custos', () => {
     pocoes: { '11': 3 },
     revives: { '12': 1 },
     drops: { '3': { nome: 'Seed', qtd: 5 }, 'nome:X': { nome: 'X', qtd: 1 } },
+    vendasAuto: 500,
   };
 
   it('calcula taxas por hora, custo e lucro líquido', () => {
@@ -98,7 +100,8 @@ describe('taxas e custos', () => {
     expect(t.abatesMin).toBeCloseTo(100 / 60);
     expect(t.custoH).toBe(2800);
     expect(t.lucroLiquidoH).toBe(1300);
-    expect(t.dropsValorH).toBe(200);
+    expect(t.vendasAutoH).toBe(1000);
+    expect(t.lucroRealH).toBe(2300);
     expect(t.custoPorAbate).toBe(28);
   });
 
@@ -110,7 +113,6 @@ describe('taxas e custos', () => {
       custosDe({ bolas: { '9': 1 }, pocoes: {}, revives: {} }, { bola: () => NaN, item: () => 0 })
         .total,
     ).toBe(0);
-    expect(valorDrops({}, precos)).toBe(0);
   });
 
   it('agrega sessões somando contadores e drops', () => {
@@ -168,6 +170,34 @@ describe('dicas de tipo', () => {
     expect(classificar(1)).toBe('neutro');
   });
 
+  it('pontua o pokémon pesando dano causado, dano recebido e nível', () => {
+    const hunt = { ...geodude, nivel: 10 };
+    const av = (ofensiva: number | null, defensiva: number | null) => ({
+      ofensiva,
+      defensiva,
+      classificacao: classificar(ofensiva),
+      perigo: false,
+      especiesConhecidas: 1,
+      especiesTotal: 1,
+    });
+    const forteFragil = pontuarParaHunt(av(2, 4), 50, hunt)!;
+    const equilibrado = pontuarParaHunt(av(1.8, 1), 50, hunt)!;
+    expect(equilibrado).toBeGreaterThan(forteFragil);
+    expect(pontuarParaHunt(av(2, 1), 5, hunt)!).toBeLessThan(pontuarParaHunt(av(2, 1), 10, hunt)!);
+    expect(pontuarParaHunt(av(2, 1), 10, hunt)).toBe(pontuarParaHunt(av(2, 1), 999, hunt));
+    expect(pontuarParaHunt(av(2, 1), undefined, hunt)).toBe(pontuarParaHunt(av(2, 1), 10, hunt));
+    expect(pontuarParaHunt(av(2, 0), 10, hunt)).toBeCloseTo(4, 6);
+    expect(pontuarParaHunt(av(null, 1), 10, hunt)).toBeNull();
+  });
+
+  it('não sugere um atacante forte que apanha super efetivo quando há opção equilibrada', () => {
+    const fragil = { ...charmander, id: 10, nome: 'Frágil' };
+    const time = [fragil, { ...squirtle, id: 11, nome: 'Equilibrado' }];
+    const s = melhorDoTime(geodude, time, especies, tabela);
+    expect(s?.pokemon.nome).toBe('Equilibrado');
+    expect(s?.pontuacao).toBeGreaterThan(0);
+  });
+
   it('sugere o melhor pokémon do time para a hunt', () => {
     expect(melhorDoTime(geodude, [charmander, squirtle], especies, tabela)?.pokemon.nome).toBe(
       'Squirtle',
@@ -205,6 +235,8 @@ describe('catálogos', () => {
     expect(itens.nome('6')).toBe('Revive');
     expect(itens.nome('nome:Seed')).toBe('Seed');
     expect(itens.nome('999')).toBe('Item 999');
+    expect(itens.porNome('potion')?.id).toBe(5);
+    expect(itens.porNome('Nada')).toBeUndefined();
   });
 });
 
@@ -265,6 +297,77 @@ describe('ranking de hunts', () => {
     expect(g!.melhorPokemon?.nome).toBe('Squirtle');
     expect(ordenar(r.linhas, 'lucro').map((l) => l.slug)[0]).toBe('geodude');
     expect(ordenar(r.linhas, 'xp', 5).map((l) => l.slug)).not.toContain('geodude');
+  });
+
+  it('aplica VIP e boosts ativos só nas linhas estimadas e teóricas', () => {
+    const base = {
+      hunts,
+      catalogo: especies,
+      tabela,
+      ativo: charmander,
+      time: [charmander],
+      precos,
+      amostraMinimaMs: 900_000,
+    };
+    const sessoes = [sessaoReal('bellsprout', 1_800_000, 100)];
+    const sem = montarRanking({ ...base, sessoes });
+    const com = montarRanking({
+      ...base,
+      sessoes,
+      multiplicadores: {
+        xpTreinador: 2,
+        xpPokemon: 1.5,
+        bonusLootPct: 100,
+        ativos: [{ rotulo: 'VIP', mult: 1.5 }],
+      },
+    });
+    const real = (r: typeof sem) => r.linhas.find((l) => l.slug === 'bellsprout')!;
+    const est = (r: typeof sem) => r.linhas.find((l) => l.slug === 'geodude')!;
+    expect(real(com).xpH).toBe(real(sem).xpH);
+    expect(est(com).xpH).toBeCloseTo(est(sem).xpH * 1.5, 6);
+    expect(est(com).goldH).toBeCloseTo(ouroPorAbate(geodude.nivel, 100) * est(com).abatesH, 6);
+    expect(com.multiplicadores.ativos).toHaveLength(1);
+    expect(sem.multiplicadores.ativos).toEqual([]);
+  });
+
+  it('com simulador, estima as hunts não visitadas pela força do pokémon e calibra', () => {
+    const simular = (h: Hunt) => ({
+      abatesH: h.slug === 'geodude' ? 100 : 1000,
+      tAbateMedioS: h.slug === 'geodude' ? 36 : 3.6,
+      acoesPorAbateMedio: 4,
+      segundosParaDesmaiar: 30,
+      porEspecie: [],
+    });
+    const r = montarRanking({
+      hunts,
+      sessoes: [],
+      catalogo: especies,
+      tabela,
+      ativo: charmander,
+      time: [charmander],
+      precos,
+      amostraMinimaMs: 900_000,
+      simular,
+      calibracao: { fator: 0.5, sessoes: 3 },
+    });
+    const g = r.linhas.find((l) => l.slug === 'geodude')!;
+    expect(g.fonte).toBe('simulado');
+    expect(g.abatesH).toBe(50);
+    expect(g.xpH).toBeCloseTo(50 * xpDoNivel(geodude.nivel), 6);
+    expect(g.simulacao).toEqual({ tAbateS: 72, acoesPorAbate: 4, segundosParaDesmaiar: 30 });
+    expect(r.calibracao).toEqual({ fator: 0.5, sessoes: 3 });
+    const semCalib = montarRanking({
+      hunts,
+      sessoes: [],
+      catalogo: especies,
+      tabela,
+      time: [],
+      precos,
+      amostraMinimaMs: 900_000,
+      simular: (h: Hunt) => (h.slug === 'geodude' ? null : simular(h)),
+    });
+    expect(semCalib.linhas.find((l) => l.slug === 'bellsprout')!.abatesH).toBe(1000);
+    expect(semCalib.linhas.find((l) => l.slug === 'geodude')!.fonte).toBe('teorico');
   });
 
   it('desempata pela fonte e pelo nível', () => {

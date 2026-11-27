@@ -1,14 +1,15 @@
 import { escutarPonte } from '../bridge/receptor';
-import { CatalogoEspecies, CatalogoItens } from '../domain/catalogo';
 import { EstadoJogo } from '../domain/estadoJogo';
 import { lerVersaoJogo } from '../domain/versaoJogo';
 import { abrirBanco } from '../persistence/banco';
 import { DestinoLogBanco } from '../persistence/destinoLogBanco';
 import { RepositorioSessoes } from '../persistence/repositorioSessoes';
 import { CHAVE_CONFIG, mesclarConfig, type OverridesConfig } from '../shared/config';
+import { CHAVE_PREFERENCIAS, lerPreferencias, type PreferenciasUi } from '../shared/preferencias';
 import { DestinoConsole, GerenciadorLog, erroParaCtx, type NivelLog } from '../shared/logger';
 import { baixarJson, montarInterface } from '../ui/montar';
 import { Aplicacao } from './aplicacao';
+import { carregarCatalogos } from './carregarCatalogos';
 import type { EnvelopeValido } from '../bridge/receptor';
 import type { Sessao } from '../domain/sessao';
 
@@ -38,34 +39,39 @@ async function lerOverrides(): Promise<unknown> {
   }
 }
 
+async function carregarPreferencias(): Promise<PreferenciasUi> {
+  try {
+    const r = await chrome.storage.local.get(CHAVE_PREFERENCIAS);
+    return lerPreferencias(r[CHAVE_PREFERENCIAS]);
+  } catch (erro) {
+    log.warn('Não foi possível ler as preferências do painel', erroParaCtx(erro));
+    return lerPreferencias(undefined);
+  }
+}
+
+function salvarPreferencias(p: PreferenciasUi): void {
+  chrome.storage.local
+    .set({ [CHAVE_PREFERENCIAS]: p })
+    .catch((erro: unknown) =>
+      log.warn('Falha ao salvar preferências do painel', erroParaCtx(erro)),
+    );
+}
+
 async function salvarOverride(parcial: OverridesConfig): Promise<void> {
   const atual = ((await lerOverrides()) ?? {}) as OverridesConfig;
   await chrome.storage.local.set({ [CHAVE_CONFIG]: { ...atual, ...parcial } });
 }
 
-async function carregarCatalogos(origem: string, caminhosEspecies: string[], caminhoItens: string) {
-  const especies = new CatalogoEspecies();
-  const itens = new CatalogoItens();
+function fontesDoJogo(origem: string) {
   const baixar = async (caminho: string) => {
     const r = await fetch(new URL(caminho, origem), { credentials: 'same-origin' });
     if (!r.ok) throw new Error(`HTTP ${r.status} em ${caminho}`);
-    return r.json() as Promise<unknown>;
+    return r;
   };
-  const resultados = await Promise.allSettled([
-    ...caminhosEspecies.map(baixar),
-    baixar(caminhoItens),
-  ]);
-  resultados.forEach((r, i) => {
-    const caminho = i < caminhosEspecies.length ? caminhosEspecies[i] : caminhoItens;
-    if (r.status === 'rejected') {
-      log.warn('Catálogo indisponível', { caminho, ...erroParaCtx(r.reason) });
-      return;
-    }
-    if (i < caminhosEspecies.length) especies.adicionarJson(r.value);
-    else itens.adicionarJson(r.value);
-  });
-  log.info('Catálogos carregados', { especies: especies.tamanho });
-  return { especies, itens };
+  return {
+    baixarJson: async (caminho: string) => (await baixar(caminho)).json() as Promise<unknown>,
+    baixarTexto: async (caminho: string) => (await baixar(caminho)).text(),
+  };
 }
 
 function quandoPronto(fn: () => void) {
@@ -94,9 +100,9 @@ async function iniciar() {
   }
 
   const { especies, itens } = await carregarCatalogos(
-    config.jogo.origem,
-    config.jogo.assetsEspecies,
-    config.jogo.assetItens,
+    config.jogo,
+    fontesDoJogo(config.jogo.origem),
+    log.filho('catalogo'),
   );
   const estado = new EstadoJogo(log.filho('estado'));
   const memoria = new Map<string, Sessao>();
@@ -116,6 +122,7 @@ async function iniciar() {
   if (!repositorio)
     app.avisar('O navegador bloqueou o armazenamento local; o histórico só vale até fechar a aba.');
   await app.carregarHistorico();
+  const preferencias = await carregarPreferencias();
 
   entregar = (e) => app.receber(e);
   for (const e of pendentes.splice(0)) app.receber(e);
@@ -155,6 +162,8 @@ async function iniciar() {
         );
       },
       nivelLog: () => nivelAtual,
+      preferencias: () => preferencias,
+      salvarPreferencias,
     });
     log.info('Helper iniciado', { versao });
   });

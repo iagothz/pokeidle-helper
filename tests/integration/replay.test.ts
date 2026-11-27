@@ -102,7 +102,7 @@ describe('replay ponta a ponta (captura → ponte → domínio → persistência
       'Great Ball',
     ]);
 
-    app.receber(envelope({ t: 'estado', estado: { eu: { huntSlug: 'geodude' } } }, 240_000));
+    app.receber(envelope({ t: 'estado', estado: { huntSlug: 'geodude' } }, 240_000));
     await new Promise((r) => setTimeout(r, 10));
     const salvas = await repositorio.listar();
     expect(salvas).toHaveLength(1);
@@ -119,7 +119,7 @@ describe('replay ponta a ponta (captura → ponte → domínio → persistência
     expect(modelo.sessao!.sugestao?.nome).toBe('Squirtle');
     const linhas = modelo.ranking!.linhas;
     expect(linhas.find((l) => l.slug === 'bellsprout')!.fonte).toBe('real');
-    expect(linhas.find((l) => l.slug === 'geodude')!.fonte).toBe('estimado');
+    expect(linhas.find((l) => l.slug === 'geodude')!.fonte).toBe('simulado');
     expect(modelo.diagnostico).toMatchObject({
       welcome: true,
       sessoesSalvas: 1,
@@ -148,7 +148,7 @@ describe('replay ponta a ponta (captura → ponte → domínio → persistência
     segunda.app.receber(envelope(welcome, 0));
     expect(segunda.app.modelo().diagnostico.sessoesSalvas).toBe(1);
     expect(segunda.app.modelo().ranking!.linhas[0]!.fonte).toBe('real');
-    segunda.app.receber(envelope({ t: 'estado', estado: { eu: { noCentro: true } } }, 300_000));
+    segunda.app.receber(envelope({ t: 'estado', estado: { noCentro: true } }, 300_000));
     expect(segunda.app.modelo().sessao).toBeNull();
 
     expect(segunda.app.exportarDados().sessoes).toHaveLength(1);
@@ -180,7 +180,7 @@ describe('replay ponta a ponta (captura → ponte → domínio → persistência
     await app.carregarHistorico();
     app.receber(envelope(welcome, 0));
     for (const b of batalhas) app.receber(envelope({ t: 'batalha', ev: b.ev }, b.em));
-    app.receber(envelope({ t: 'estado', estado: { eu: { huntSlug: null } } }, 400_000));
+    app.receber(envelope({ t: 'estado', estado: { huntSlug: null } }, 400_000));
     await new Promise((r) => setTimeout(r, 10));
     expect(app.modelo().avisos).toHaveLength(2);
     expect(notificacoes).toBeGreaterThan(0);

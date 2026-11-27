@@ -1,20 +1,40 @@
 import type { EnvelopeValido } from '../bridge/receptor';
 import type { CatalogoEspecies, CatalogoItens } from '../domain/catalogo';
 import type { EstadoJogo } from '../domain/estadoJogo';
-import { RastreadorSessao, type Sessao } from '../domain/sessao';
+import { RastreadorSessao, normalizarSessao, type Sessao } from '../domain/sessao';
 import type { PokemonJogador } from '../domain/schemas';
 import {
   avaliarHunt,
   melhorDoTime,
+  pontuarParaHunt,
   tiposDoPokemon,
   type AvaliacaoTipo,
 } from '../analysis/dicasTipo';
+import { calcularAutonomia, type Autonomia } from '../analysis/autonomia';
+import { avaliarDanoRecebido, type AvaliacaoDano } from '../analysis/danoRecebido';
+import { montarHistorico, type Historico } from '../analysis/historico';
+import { previsaoDeNivel, type PrevisaoNivel } from '../analysis/metas';
+import { calcularMultiplicadores } from '../analysis/multiplicadores';
 import { montarRanking, type ResultadoRanking } from '../analysis/ranking';
 import { taxasDe, type Precos, type Taxas } from '../analysis/taxas';
 import type { Config } from '../shared/config';
 import type { Logger } from '../shared/logger';
 import { erroParaCtx } from '../shared/logger';
 import { VERSAO_JOGO_VALIDADA } from '../shared/protocolo';
+import type { Calibracao } from '../analysis/calibracao';
+import { ServicoSimulacao, type AnaliseDoPokemon } from './servicoSimulacao';
+import { xpDoNivel } from '../analysis/formulasJogo';
+import { montarEconomia, type Economia } from './servicoEconomia';
+import {
+  custoRefino,
+  pokemonsTravados,
+  progressoEvolucao,
+  type PokemonTravado,
+  type ProgressoEvolucao,
+} from '../analysis/progressao';
+
+const AMOSTRA_RITMO_MS = 5 * 60_000;
+const NOME_FRAGMENTO_OVO = 'Shiny Egg Fragment';
 
 export interface RepositorioSessoesPorta {
   salvar(s: Sessao): Promise<unknown>;
@@ -28,14 +48,27 @@ export interface ItemConsumido {
   custo: number;
 }
 
+export interface ItemDrop {
+  nome: string;
+  qtd: number;
+  aCadaAbates: number | null;
+}
+
 export interface ModeloSessao {
   huntSlug: string;
   huntNome: string;
   taxas: Taxas;
   abates: number;
   capturas: number;
+  fugas: number;
+  desmaios: number;
+  xpPerdido: number;
+  metas: { treinador: PrevisaoNivel | null; pokemon: PrevisaoNivel | null };
   consumidos: ItemConsumido[];
+  drops: ItemDrop[];
+  autonomia: Autonomia;
   tipo: AvaliacaoTipo | null;
+  dano: AvaliacaoDano;
   sugestao: PokemonJogador | null;
   ativo: PokemonJogador | null;
 }
@@ -49,10 +82,40 @@ export interface Diagnostico {
   eventosInvalidos: number;
   captura: Record<string, number> | null;
   ultimaMensagemEm: number | null;
+  dadosAtivo: { ivs: boolean; qualidade: boolean; stats: boolean; golpes: number } | null;
+}
+
+export interface AnaliseTime {
+  huntNome: string;
+  huntNivel: number;
+  ativoId: string | null;
+  linhas: AnaliseDoPokemon[];
+  calibracao: Calibracao | null;
+}
+
+export interface RefinoStat {
+  stat: string;
+  pontos: number;
+  proximo: number;
+}
+
+export interface ModeloProgresso {
+  treinador: { level: number | null; xp: number | null; xpH: number };
+  ativo: {
+    pokemon: PokemonJogador;
+    xpH: number;
+    evolucao: ProgressoEvolucao | null;
+    refino: RefinoStat[];
+  } | null;
+  travados: PokemonTravado<PokemonJogador>[];
+  ritmo: 'sessao' | 'simulado' | 'nenhum';
 }
 
 export interface Modelo {
   status: 'aguardando-login' | 'pronto';
+  time: AnaliseTime | null;
+  progresso: ModeloProgresso | null;
+  economia: Economia | null;
   sessao: ModeloSessao | null;
   ranking: ResultadoRanking | null;
   nivelAtivo: number | null;
@@ -80,10 +143,13 @@ export class Aplicacao {
   private ultimaMensagemEm: number | null = null;
   private cacheRanking: ResultadoRanking | null = null;
   private versaoJogo: string | null = null;
+  private cacheTime: AnaliseTime | null = null;
+  readonly simulacao: ServicoSimulacao;
   private readonly log: Logger;
 
   constructor(private readonly d: DependenciasAplicacao) {
     this.log = d.log;
+    this.simulacao = new ServicoSimulacao(d.estado, d.especies);
     this.rastreador = new RastreadorSessao(
       {
         pausaMaximaMs: d.config.pausaMaximaMs,
@@ -99,7 +165,8 @@ export class Aplicacao {
 
   async carregarHistorico(): Promise<void> {
     try {
-      for (const s of await this.d.repositorio.listar()) this.sessoes.set(s.id, s);
+      for (const s of await this.d.repositorio.listar())
+        this.sessoes.set(s.id, normalizarSessao(s));
       this.cacheRanking = null;
       this.log.info('Histórico carregado', { sessoes: this.sessoes.size });
     } catch (erro) {
@@ -123,6 +190,7 @@ export class Aplicacao {
         (envelope.dados as { ev: unknown[] }).ev,
         envelope.recebidoEm,
       );
+      this.registrarPokemonAtivo();
       this.notificar();
     }
     if (tipo === 'welcome') this.cacheRanking = null;
@@ -133,9 +201,20 @@ export class Aplicacao {
     if (j) {
       const slug = j.noCentro ? null : j.huntSlug;
       this.rastreador.definirHunt(slug, undefined, this.ultimaMensagemEm ?? undefined);
+      this.registrarPokemonAtivo();
     }
     this.cacheRanking = null;
     this.notificar();
+  }
+
+  private registrarPokemonAtivo() {
+    const pk = this.d.estado.pokemonAtivo();
+    if (!pk) return;
+    this.rastreador.registrarPokemon({
+      id: String(pk.id),
+      ...(pk.speciesId !== undefined ? { speciesId: pk.speciesId } : {}),
+      ...(pk.level !== undefined ? { level: pk.level } : {}),
+    });
   }
 
   private salvarSessao(s: Sessao) {
@@ -179,12 +258,140 @@ export class Aplicacao {
     };
   }
 
+  melhoresHuntsPara(pokemonId: string, criterio: 'xp' | 'gold', limite = 10) {
+    const estado = this.d.estado;
+    const pk = estado.jogador()?.pokemons.find((p) => String(p.id) === pokemonId);
+    if (!pk) return [];
+    const agora = (this.d.agora ?? Date.now)();
+    return this.simulacao.melhoresHunts(
+      pk,
+      estado.hunts,
+      criterio,
+      limite,
+      this.cacheRanking?.calibracao ?? this.simulacao.calibracao([...this.sessoes.values()]),
+      calcularMultiplicadores({ agora, ...estado.bonus(agora) }),
+    );
+  }
+
+  private montarEconomiaAtual(): Economia | null {
+    const estado = this.d.estado;
+    const jogador = estado.jogador();
+    const atual = this.rastreador.sessaoAtual;
+    const hunt = estado.huntPorSlug(atual?.huntSlug ?? jogador?.huntSlug);
+    if (!hunt || !jogador) return null;
+    const taxas = atual && atual.msAtivo >= AMOSTRA_RITMO_MS ? taxasDe(atual, this.precos()) : null;
+    const ativoId = jogador.activeId;
+    const simulado = this.cacheTime?.linhas.find((l) => String(l.pokemon.id) === ativoId);
+    const idFragmento = this.d.itens.porNome(NOME_FRAGMENTO_OVO)?.id;
+    return montarEconomia({
+      hunt,
+      todasHunts: estado.hunts,
+      especies: this.d.especies,
+      bolas: [...estado.bolas.values()],
+      inventarioBolas: jogador.bolas,
+      captura: estado.captura,
+      chanceShiny: estado.chanceShiny,
+      abatesH: taxas?.abatesH ?? simulado?.abatesH ?? 0,
+      fonteRitmo: taxas ? 'sessao' : simulado ? 'simulado' : 'nenhum',
+      sessao: atual
+        ? {
+            capturas: atual.capturas,
+            fugas: atual.fugas,
+            bolasUsadas: Object.values(atual.bolas).reduce((a, b) => a + b, 0),
+            msAtivo: atual.msAtivo,
+          }
+        : null,
+      fragmentosOvo: idFragmento !== undefined ? (jogador.itens[String(idFragmento)] ?? 0) : 0,
+    });
+  }
+
+  private montarProgresso(): ModeloProgresso | null {
+    const estado = this.d.estado;
+    const jogador = estado.jogador();
+    if (!jogador) return null;
+    const ativo = estado.pokemonAtivo() ?? null;
+    const atual = this.rastreador.sessaoAtual;
+    const taxas = atual && atual.msAtivo >= AMOSTRA_RITMO_MS ? taxasDe(atual, this.precos()) : null;
+    const simulado = this.cacheTime?.linhas.find(
+      (l) => ativo && String(l.pokemon.id) === String(ativo.id),
+    );
+    const ritmo = taxas ? 'sessao' : simulado ? 'simulado' : 'nenhum';
+    const xpTreinadorH = taxas?.xpTreinadorH ?? simulado?.xpTreinadorH ?? 0;
+    const xpPokemonH = taxas?.xpPokemonH ?? simulado?.xpPokemonH ?? 0;
+    const hunt = estado.huntPorSlug(atual?.huntSlug ?? jogador.huntSlug);
+    const especie = this.d.especies.obter(ativo?.speciesId);
+    const agora = (this.d.agora ?? Date.now)();
+    const xpPorAbate = hunt
+      ? xpDoNivel(hunt.nivel) * calcularMultiplicadores({ agora, ...estado.bonus(agora) }).xpPokemon
+      : 0;
+    return {
+      treinador: { level: jogador.level ?? null, xp: jogador.xp ?? null, xpH: xpTreinadorH },
+      ativo: ativo
+        ? {
+            pokemon: ativo,
+            xpH: xpPokemonH,
+            evolucao: especie ? progressoEvolucao(ativo, especie, xpPorAbate, xpPokemonH) : null,
+            refino: Object.entries(ativo.refino ?? {}).map(([stat, pontos]) => ({
+              stat,
+              pontos,
+              proximo: custoRefino(pontos).proximo,
+            })),
+          }
+        : null,
+      travados: pokemonsTravados(jogador.pokemons, jogador, xpTreinadorH),
+      ritmo,
+    };
+  }
+
+  private recalcularAnalises(precos: Precos): void {
+    const estado = this.d.estado;
+    const jogador = estado.jogador();
+    const ativo = estado.pokemonAtivo();
+    const agora = (this.d.agora ?? Date.now)();
+    const sessoes = [...this.sessoes.values()];
+    const multiplicadores = calcularMultiplicadores({ agora, ...estado.bonus(agora) });
+    const calibracao = this.simulacao.calibracao(sessoes);
+    const simular = ativo ? this.simulacao.simuladorPara(ativo) : null;
+    this.cacheRanking = montarRanking({
+      hunts: estado.hunts,
+      sessoes,
+      catalogo: this.d.especies,
+      tabela: estado.tabelaTipos,
+      ...(ativo ? { ativo } : {}),
+      time: jogador?.pokemons ?? [],
+      precos,
+      amostraMinimaMs: this.d.config.amostraMinimaMs,
+      multiplicadores,
+      ...(simular ? { simular } : {}),
+      calibracao,
+    });
+    const slug = this.rastreador.sessaoAtual?.huntSlug ?? jogador?.huntSlug ?? null;
+    const hunt = estado.huntPorSlug(slug);
+    this.cacheTime =
+      hunt && jogador
+        ? {
+            huntNome: hunt.nome || hunt.slug,
+            huntNivel: hunt.nivel,
+            ativoId: jogador.activeId ?? null,
+            linhas: this.simulacao.analisarTime(
+              hunt,
+              this.simulacao.equipe(jogador),
+              calibracao,
+              multiplicadores,
+            ),
+            calibracao,
+          }
+        : null;
+  }
+
   modelo(): Modelo {
     const estado = this.d.estado;
     const jogador = estado.jogador();
     const ativo = estado.pokemonAtivo() ?? null;
     const precos = this.precos();
     const atual = this.rastreador.sessaoAtual;
+    if (estado.recebeuWelcome && !this.cacheRanking) this.recalcularAnalises(precos);
+    const melhorSimulado = this.cacheTime?.linhas[0]?.pokemon ?? null;
     let sessao: ModeloSessao | null = null;
     if (atual) {
       const hunt = estado.huntPorSlug(atual.huntSlug);
@@ -209,12 +416,20 @@ export class Aplicacao {
           qtd,
           custo: preco(Number(id)) * qtd,
         }));
+      const taxas = taxasDe(atual, precos);
       sessao = {
         huntSlug: atual.huntSlug,
         huntNome: atual.huntNome,
-        taxas: taxasDe(atual, precos),
+        taxas,
         abates: atual.abates,
         capturas: atual.capturas,
+        fugas: atual.fugas,
+        desmaios: atual.desmaios,
+        xpPerdido: atual.xpPerdido,
+        metas: {
+          treinador: previsaoDeNivel(jogador ?? undefined, taxas.xpTreinadorH),
+          pokemon: previsaoDeNivel(ativo ?? undefined, taxas.xpPokemonH),
+        },
         consumidos: [
           ...consumidos(atual.pocoes, precos.item, (id) => this.d.itens.nome(id)),
           ...consumidos(atual.revives, precos.item, (id) => this.d.itens.nome(id)),
@@ -224,31 +439,43 @@ export class Aplicacao {
             (id) => estado.bolas.get(Number(id))?.name ?? `Bola ${id}`,
           ),
         ],
+        drops: Object.entries(atual.drops)
+          .map(([chave, d]) => ({
+            nome: d.nome ?? this.d.itens.nome(chave),
+            qtd: d.qtd,
+            aCadaAbates: d.qtd > 0 ? atual.abates / d.qtd : null,
+          }))
+          .toSorted((a, b) => b.qtd - a.qtd),
+        autonomia: calcularAutonomia({
+          msAtivo: atual.msAtivo,
+          consumo: atual,
+          estoque: { itens: jogador?.itens ?? {}, bolas: jogador?.bolas ?? {} },
+          nome: (categoria, id) =>
+            categoria === 'bola'
+              ? (estado.bolas.get(Number(id))?.name ?? `Bola ${id}`)
+              : this.d.itens.nome(id),
+        }),
         tipo,
-        sugestao:
-          sugestao &&
-          ativo &&
-          String(sugestao.pokemon.id) !== String(ativo.id) &&
-          (sugestao.avaliacao.ofensiva ?? 0) > (tipo?.ofensiva ?? 0)
+        dano: avaliarDanoRecebido(atual),
+        sugestao: this.cacheTime?.linhas.length
+          ? melhorSimulado && ativo && String(melhorSimulado.id) !== String(ativo.id)
+            ? melhorSimulado
+            : null
+          : sugestao &&
+              ativo &&
+              hunt &&
+              String(sugestao.pokemon.id) !== String(ativo.id) &&
+              sugestao.pontuacao > (tipo ? (pontuarParaHunt(tipo, ativo.level, hunt) ?? 0) : 0)
             ? sugestao.pokemon
             : null,
         ativo,
       };
     }
-    if (estado.recebeuWelcome && !this.cacheRanking) {
-      this.cacheRanking = montarRanking({
-        hunts: estado.hunts,
-        sessoes: [...this.sessoes.values()],
-        catalogo: this.d.especies,
-        tabela: estado.tabelaTipos,
-        ...(ativo ? { ativo } : {}),
-        time: jogador?.pokemons ?? [],
-        precos,
-        amostraMinimaMs: this.d.config.amostraMinimaMs,
-      });
-    }
     return {
       status: estado.recebeuWelcome ? 'pronto' : 'aguardando-login',
+      time: estado.recebeuWelcome ? this.cacheTime : null,
+      progresso: estado.recebeuWelcome ? this.montarProgresso() : null,
+      economia: estado.recebeuWelcome ? this.montarEconomiaAtual() : null,
       sessao,
       ranking: estado.recebeuWelcome ? this.cacheRanking : null,
       nivelAtivo: ativo?.level ?? null,
@@ -262,8 +489,20 @@ export class Aplicacao {
         eventosInvalidos: this.rastreador.eventosInvalidos,
         captura: this.capturaStats,
         ultimaMensagemEm: this.ultimaMensagemEm,
+        dadosAtivo: ativo
+          ? {
+              ivs: !!ativo.ivs,
+              qualidade: ativo.quality !== undefined,
+              stats: !!ativo.stats,
+              golpes: this.d.especies.obter(ativo.speciesId)?.golpes.length ?? 0,
+            }
+          : null,
       },
     };
+  }
+
+  historico(filtroSlug?: string): Historico {
+    return montarHistorico([...this.sessoes.values()], this.precos(), filtroSlug);
   }
 
   exportarDados(): { versao: string; exportadoEm: number; sessoes: Sessao[] } {

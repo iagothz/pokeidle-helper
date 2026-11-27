@@ -7,7 +7,9 @@ export const ESTILOS = `
 .botao-flutuante.alerta { border-color: #d08770; color: #ebcb8b; }
 .painel { position: fixed; right: 16px; bottom: 70px; z-index: 2147483647; width: 380px; max-height: 70vh; display: flex; flex-direction: column;
   background: #1f2430; color: #e5e9f0; border: 1px solid #3b4252; border-radius: 10px; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
-.cabecalho { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #3b4252; }
+.cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #3b4252; cursor: move; user-select: none; }
+.painel.minimizado .cabecalho { border-bottom: none; }
+.botao-janela { background: #2e3440; color: #d8dee9; border: 1px solid #3b4252; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; font-weight: 700; line-height: 1; }
 .cabecalho h1 { font-size: 13px; margin: 0; font-weight: 700; }
 .abas { display: flex; gap: 4px; padding: 8px 12px 0; }
 .abas button, .acao, .seg button { background: #2e3440; color: #d8dee9; border: 1px solid #3b4252; border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px; }
@@ -22,7 +24,7 @@ export const ESTILOS = `
 .dica { background: #2b3540; border: 1px solid #5e81ac; border-radius: 6px; padding: 6px 8px; margin: 8px 0; }
 .selo { display: inline-block; border-radius: 4px; padding: 1px 6px; font-size: 10.5px; font-weight: 600; }
 .selo.real { background: #a3be8c33; color: #a3be8c; } .selo.real-pouca-amostra { background: #ebcb8b33; color: #ebcb8b; }
-.selo.estimado { background: #81a1c133; color: #81a1c1; } .selo.teorico { background: #4c566a; color: #d8dee9; }
+.selo.estimado, .selo.simulado { background: #81a1c133; color: #81a1c1; } .selo.teorico { background: #4c566a; color: #d8dee9; }
 .selo.vantagem { background: #a3be8c33; color: #a3be8c; } .selo.desvantagem { background: #bf616a33; color: #e08a92; }
 .selo.neutro, .selo.desconhecido { background: #4c566a; color: #d8dee9; } .selo.perigo { background: #d0877033; color: #d08770; }
 table { width: 100%; border-collapse: collapse; }
@@ -31,6 +33,9 @@ th { color: #a3abba; font-weight: 600; font-size: 11px; }
 td.num, th.num { text-align: right; white-space: nowrap; }
 .linha-atual td { background: #2b3540; }
 .muted { color: #a3abba; }
+.campo-nivel { width: 90px; background: #2e3440; color: #e5e9f0; border: 1px solid #3b4252; border-radius: 6px; padding: 3px 6px; }
+.abas { flex-wrap: wrap; }
+.secao { font-size: 12px; font-weight: 700; margin: 12px 0 4px; color: #d8dee9; }
 .controles { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
 .seg { display: inline-flex; gap: 2px; }
 label { display: inline-flex; gap: 4px; align-items: center; }
