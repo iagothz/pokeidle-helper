@@ -5,6 +5,12 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.8.1] - 2026-11-26
+
+### Corrigido
+
+- Calibração: o deslocamento por abate era diluído pelos abates de sessões antigas, sem fases medidas (2,65 s viravam ~0,86 s). Agora só entram as sessões que mediram fases. Conferido com sessões reais: Sunkern 737/h calibrado contra 737–764/h real.
+
 ## [0.8.0] - 2026-11-26
 
 ### Adicionado

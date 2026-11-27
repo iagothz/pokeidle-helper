@@ -69,3 +69,30 @@ describe('calibrarComponentes', () => {
     expect(semOndas?.esperaPorOndaS).toBeNull();
   });
 });
+
+describe('calibrarComponentes com sessões antigas sem fases medidas', () => {
+  it('não dilui o deslocamento com abates de sessões que não mediram fases', () => {
+    const nova = {
+      abatesReais: 311,
+      msAtivo: 1_465_324,
+      golpesReais: 851,
+      golpesSimulados: 1244,
+      deslocamentoMs: 824_546,
+      esperaMs: 94_181,
+      ondas: 25,
+    };
+    const antiga = {
+      abatesReais: 652,
+      msAtivo: 4_043_914,
+      golpesReais: 0,
+      golpesSimulados: 3912,
+      deslocamentoMs: 0,
+      esperaMs: 0,
+      ondas: 0,
+    };
+    const r = calibrarComponentes([antiga, nova])!;
+    expect(r.deslocamentoPorAbateS).toBeCloseTo(824_546 / 311 / 1000, 6);
+    expect(r.esperaPorOndaS).toBeCloseTo(94_181 / 25 / 1000, 6);
+    expect(r.fatorDano).toBeCloseTo(1244 / 851, 6);
+  });
+});

@@ -50,8 +50,9 @@ export function calibrarComponentes(amostras: readonly AmostraComponentes[]): Co
   const danos = validas
     .filter((a) => a.golpesReais > 0 && a.golpesSimulados > 0)
     .map((a) => a.golpesSimulados / a.abatesReais / (a.golpesReais / a.abatesReais));
-  const abates = validas.reduce((s, a) => s + a.abatesReais, 0);
-  const deslocamento = validas.reduce((s, a) => s + a.deslocamentoMs, 0);
+  const comFases = validas.filter((a) => a.deslocamentoMs + a.esperaMs > 0);
+  const abates = comFases.reduce((s, a) => s + a.abatesReais, 0);
+  const deslocamento = comFases.reduce((s, a) => s + a.deslocamentoMs, 0);
   const comOndas = validas.filter((a) => a.ondas > 0);
   const ondas = comOndas.reduce((s, a) => s + a.ondas, 0);
   const espera = comOndas.reduce((s, a) => s + a.esperaMs, 0);
