@@ -1,4 +1,3 @@
-import { useState } from 'preact/hooks';
 import type { Calibracao } from '../analysis/calibracao';
 import type { Aplicacao, Modelo } from '../content/aplicacao';
 import type { AnaliseDoPokemon } from '../content/servicoSimulacao';
@@ -6,6 +5,7 @@ import type { PokemonJogador } from '../domain/schemas';
 import { curto, duracao, fracao, numero } from './formatar';
 import { notaGolpes, notaResistencia, notaVsMelhor } from './tons';
 import { Barra, Valor } from './visual';
+import { usarFiltros } from './filtros';
 
 const nomeDe = (p: PokemonJogador) => p.nome ?? p.nick ?? `#${String(p.id)}`;
 
@@ -80,8 +80,11 @@ function textoCalibracao(cal: Calibracao | null): string {
 }
 
 function MelhoresHunts({ app, time }: { app: Aplicacao; time: readonly PokemonJogador[] }) {
-  const [escolhido, definirEscolhido] = useState('');
-  const [criterio, definirCriterio] = useState<'xp' | 'gold'>('xp');
+  const { filtros, definir } = usarFiltros();
+  const escolhido = filtros.timePokemon;
+  const criterio = filtros.timeCriterio;
+  const definirEscolhido = (id: string) => definir({ timePokemon: id });
+  const definirCriterio = (c: 'xp' | 'gold') => definir({ timeCriterio: c });
   const pk = time.find((p) => String(p.id) === escolhido);
   const linhas = pk ? app.melhoresHuntsPara(String(pk.id), criterio, 15) : [];
   const valorDe = (l: (typeof linhas)[number]) => (criterio === 'xp' ? l.xpPokemonH : l.goldH);

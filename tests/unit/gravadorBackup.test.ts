@@ -37,6 +37,67 @@ describe('gravarBackup', () => {
   });
 });
 
+describe('gravarBackup silencioso', () => {
+  function downloadsCompleto(estados: string[] = ['complete']) {
+    const chamadas: string[] = [];
+    let proximoId = 10;
+    const fila = [...estados];
+    return {
+      chamadas,
+      download: vi.fn(async (o: { filename: string }) => {
+        chamadas.push(`download ${o.filename}`);
+        return proximoId++;
+      }),
+      search: vi.fn(async ({ id }: { id: number }) => [
+        { id, state: fila.length > 1 ? fila.shift()! : fila[0]! },
+      ]),
+      erase: vi.fn(async ({ id }: { id: number }) => {
+        chamadas.push(`erase ${id}`);
+        return [id];
+      }),
+      setUiOptions: vi.fn(async ({ enabled }: { enabled: boolean }) => {
+        chamadas.push(`ui ${enabled}`);
+      }),
+    };
+  }
+  const semEspera = async () => {};
+
+  it('esconde a barra de downloads, grava, apaga do histórico e reativa a barra', async () => {
+    const d = downloadsCompleto();
+    await gravarBackup(['{"a":1}', '{"b":2}'], d, semEspera);
+    expect(d.chamadas).toEqual([
+      'ui false',
+      `download ${nomeDaParte(0)}`,
+      `download ${nomeDaParte(1)}`,
+      'erase 10',
+      'erase 11',
+      'ui true',
+    ]);
+  });
+
+  it('espera o download terminar antes de apagar do histórico', async () => {
+    const d = downloadsCompleto(['in_progress', 'in_progress', 'complete']);
+    const esperar = vi.fn(async () => {});
+    await gravarBackup(['{}'], d, esperar);
+    expect(esperar).toHaveBeenCalledTimes(2);
+    expect(d.erase).toHaveBeenCalledWith({ id: 10 });
+  });
+
+  it('reativa a barra mesmo quando o download falha', async () => {
+    const d = downloadsCompleto();
+    d.download.mockRejectedValueOnce(new Error('bloqueado'));
+    await expect(gravarBackup(['{}'], d, semEspera)).rejects.toThrow('bloqueado');
+    expect(d.chamadas).toEqual(['ui false', 'ui true']);
+  });
+
+  it('não apaga do histórico um download que não terminou a tempo', async () => {
+    const d = downloadsCompleto(['in_progress']);
+    await gravarBackup(['{}'], d, semEspera);
+    expect(d.erase).not.toHaveBeenCalled();
+    expect(d.chamadas.at(-1)).toBe('ui true');
+  });
+});
+
 describe('tratarMensagem', () => {
   const ID = 'minha-extensao';
 

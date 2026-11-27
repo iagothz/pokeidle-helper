@@ -1,3 +1,5 @@
+import { faixaEm, type FaixaBonus } from './multiplicadores';
+
 const MS_HORA = 3_600_000;
 export const FOLGA_NIVEL_POKEMON = 5;
 const REFINO_CUSTO_BASE = 500;
@@ -22,6 +24,42 @@ export function etaParaNivel(xpAtual: number, nivelAlvo: number, xpPorHora: numb
   return { faltam, msAte: xpPorHora > 0 ? (faltam / xpPorHora) * MS_HORA : null };
 }
 
+export type QuemGanhaXp = 'xpTreinador' | 'xpPokemon';
+
+export interface RitmoXp {
+  xpHBase: number;
+  faixas: readonly FaixaBonus[];
+  quem: QuemGanhaXp;
+}
+
+export function horasParaGanhar(
+  xp: number,
+  xpHBase: number,
+  faixas: readonly FaixaBonus[],
+  quem: QuemGanhaXp,
+  inicioHoras = 0,
+): number {
+  let falta = Math.max(0, xp);
+  let horas = inicioHoras;
+  while (falta > 0) {
+    const { faixa, restante } = faixaEm(faixas, horas);
+    const xpH = xpHBase * faixa[quem];
+    if (!(xpH > 0)) return Infinity;
+    const ganho = xpH * restante;
+    if (ganho >= falta) return horas + falta / xpH - inicioHoras;
+    falta -= ganho;
+    horas += restante;
+  }
+  return horas - inicioHoras;
+}
+
+export function etaComBonus(xpAtual: number, nivelAlvo: number, ritmo: RitmoXp): Eta {
+  const faltam = Math.max(0, xpTotalDoNivel(nivelAlvo) - Math.max(0, xpAtual));
+  if (faltam === 0) return { faltam, msAte: 0 };
+  const horas = horasParaGanhar(faltam, ritmo.xpHBase, ritmo.faixas, ritmo.quem);
+  return { faltam, msAte: Number.isFinite(horas) ? horas * MS_HORA : null };
+}
+
 interface ComNivel {
   level?: number | undefined;
   xp?: number | undefined;
@@ -37,7 +75,7 @@ export interface PokemonTravado<P> {
 export function pokemonsTravados<P extends { level?: number | undefined }>(
   pokemons: readonly P[],
   treinador: ComNivel,
-  xpTreinadorPorHora: number,
+  ritmo: RitmoXp,
 ): PokemonTravado<P>[] {
   const nivel = treinador.level;
   if (nivel === undefined) return [];
@@ -46,7 +84,7 @@ export function pokemonsTravados<P extends { level?: number | undefined }>(
     .filter((p) => p.level !== undefined && p.level > nivel + FOLGA_NIVEL_POKEMON)
     .map((pokemon) => {
       const necessario = (pokemon.level ?? 0) - FOLGA_NIVEL_POKEMON;
-      const eta = etaParaNivel(xpAtual, necessario, xpTreinadorPorHora);
+      const eta = etaComBonus(xpAtual, necessario, ritmo);
       return {
         pokemon,
         nivelTreinadorNecessario: necessario,
@@ -68,12 +106,12 @@ export function progressoEvolucao(
   pokemon: ComNivel,
   especie: { evolveLevel: number; evolvesToId: number },
   xpPorAbate: number,
-  xpPorHora: number,
+  ritmo: RitmoXp,
 ): ProgressoEvolucao | null {
   const alvo = especie.evolveLevel;
   if (!especie.evolvesToId || !(alvo > 0) || pokemon.xp === undefined) return null;
   if ((pokemon.level ?? 0) >= alvo) return null;
-  const eta = etaParaNivel(pokemon.xp, alvo, xpPorHora);
+  const eta = etaComBonus(pokemon.xp, alvo, ritmo);
   return {
     nivelEvolucao: alvo,
     faltamXp: eta.faltam,

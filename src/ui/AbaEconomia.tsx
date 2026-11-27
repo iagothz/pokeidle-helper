@@ -1,6 +1,7 @@
 import type { Modelo } from '../content/aplicacao';
 import type { Economia, FonteRitmo } from '../content/servicoEconomia';
-import { duracao, fracao, numero } from './formatar';
+import type { AnaliseAutocatch, PendenciaAutocatch } from '../analysis/autocatch';
+import { comSinal, duracao, fracao, numero } from './formatar';
 import { Valor } from './visual';
 
 const TEXTO_RITMO: Record<FonteRitmo, string> = {
@@ -72,6 +73,151 @@ function TabelaCaptura({ e }: { e: Economia }) {
   );
 }
 
+const TEXTO_PENDENCIA: Record<PendenciaAutocatch, string> = {
+  semBolas: 'Ligue o autocatch por um tempo nesta hunt para medir bolas por abate e por captura.',
+  poucasCapturas: 'Poucas capturas ainda: bolas por captura vem da fórmula do jogo até juntar 3.',
+  semVenda:
+    'Ligue a Auto Venda do Depot para o helper medir o gold de cada captura; sem ela não há valor de venda.',
+  semTempo:
+    'Ainda não dá para medir quanto o autocatch atrasa os abates (faltam trechos com e sem bola do ativo); por ora assume zero.',
+};
+
+function Autocatch({ a }: { a: AnaliseAutocatch }) {
+  const g = a.gold;
+  return (
+    <>
+      <h2 class="secao">Vale ligar o autocatch e vender?</h2>
+      {g ? (
+        <p>
+          Gold líquido: <Valor nota={g.liquidoH > 0 ? 1 : 0}>{comSinal(g.liquidoH)}/h</Valor>
+          {' · '}XP/h: <Valor nota={a.deltaXpH < 0 ? 0.3 : 0.5}>{comSinal(a.deltaXpH)}/h</Valor>
+        </p>
+      ) : (
+        <p class="muted">Ainda sem dados para o veredito.</p>
+      )}
+      <table>
+        <tbody>
+          <tr>
+            <td>Bolas por captura</td>
+            <td class="num">
+              {a.bolasPorCaptura !== null ? numero(a.bolasPorCaptura) : '—'}{' '}
+              <span class="muted">
+                {a.fonteBolasPorCaptura === 'medido'
+                  ? `medido (${numero(a.amostra.capturas)} capturas em ${numero(a.amostra.bolas)} bolas)`
+                  : a.fonteBolasPorCaptura === 'estimado'
+                    ? 'fórmula calibrada'
+                    : ''}
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td>Bolas por abate</td>
+            <td class="num">{a.bolasPorAbate !== null ? fracao(a.bolasPorAbate) : '—'}</td>
+          </tr>
+          <tr>
+            <td>Custo por bola</td>
+            <td class="num">{numero(a.custoPorBola)}</td>
+          </tr>
+          <tr>
+            <td>Venda por captura</td>
+            <td class="num">
+              {a.valorPorCaptura !== null ? numero(a.valorPorCaptura) : '—'}{' '}
+              <span class="muted">
+                {a.amostra.capturasVendidas
+                  ? `média de ${numero(a.amostra.capturasVendidas)} vendas automáticas`
+                  : ''}
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td>Atraso por abate</td>
+            <td class="num">
+              {a.segundosExtrasPorAbate !== null ? `${fracao(a.segundosExtrasPorAbate)} s` : '—'}{' '}
+              <span class="muted">
+                {numero(a.abatesHSem)} → {numero(a.abatesHCom)} abates/h
+              </span>
+            </td>
+          </tr>
+          {g ? (
+            <>
+              <tr>
+                <td>Vendas</td>
+                <td class="num">{comSinal(g.vendasH)}/h</td>
+              </tr>
+              <tr>
+                <td>Bolas gastas</td>
+                <td class="num">{comSinal(-g.bolasH)}/h</td>
+              </tr>
+              <tr>
+                <td>Gold de abates perdidos</td>
+                <td class="num">{comSinal(-g.abatesPerdidosH)}/h</td>
+              </tr>
+            </>
+          ) : null}
+        </tbody>
+      </table>
+      {a.pendencias.map((p) => (
+        <p key={p} class="dica">
+          {TEXTO_PENDENCIA[p]}
+        </p>
+      ))}
+    </>
+  );
+}
+
+function ChanceReal({ e }: { e: Economia }) {
+  const f = e.fatorCaptura;
+  return (
+    <>
+      <h2 class="secao">Chance real de captura nesta hunt</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Bola</th>
+            <th class="num">Fórmula</th>
+            <th class="num">Medida</th>
+            <th class="num">Usada</th>
+            <th class="num">Bolas/captura</th>
+          </tr>
+        </thead>
+        <tbody>
+          {e.chancesNaHunt.map((c) => (
+            <tr key={c.bolaId}>
+              <td>{c.nome}</td>
+              <td class="num">{c.formula !== null ? pct(c.formula) : '—'}</td>
+              <td class="num">
+                {c.medida !== null ? pct(c.medida) : '—'}
+                {c.intervalo ? (
+                  <>
+                    <br />
+                    <span class="muted">
+                      {pct(c.intervalo[0])}–{pct(c.intervalo[1])} · {numero(c.capturas)}/
+                      {numero(c.arremessos)}
+                    </span>
+                  </>
+                ) : null}
+              </td>
+              <td class="num">
+                <Valor nota={c.arremessos > 0 ? 1 : 0.5}>
+                  {c.calibrada !== null ? pct(c.calibrada) : '—'}
+                </Valor>
+              </td>
+              <td class="num">{c.calibrada ? numero(Math.round(1 / c.calibrada)) : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p class="muted">
+        "Usada" junta a medida com a fórmula: com pouca amostra fica perto da fórmula, com muita
+        vira a medida. Faixa de 95% abaixo da medida.
+        {f && f.esperadas > 0
+          ? ` Em todas as hunts: ${numero(f.capturas)} capturas contra ${fracao(f.esperadas)} esperadas pela fórmula (fator ${fracao(f.fator)}×, usado onde ainda não há medida).`
+          : ''}
+      </p>
+    </>
+  );
+}
+
 export function AbaEconomia({ modelo }: { modelo: Modelo }) {
   const e = modelo.economia;
   if (!e) return <p class="muted">Entre numa hunt para ver captura, shiny e drops dela.</p>;
@@ -83,6 +229,8 @@ export function AbaEconomia({ modelo }: { modelo: Modelo }) {
           · {numero(e.abatesH)} {TEXTO_RITMO[e.fonteRitmo]}
         </span>
       </p>
+      {e.autocatch ? <Autocatch a={e.autocatch} /> : null}
+      {e.chancesNaHunt.length ? <ChanceReal e={e} /> : null}
       <h2 class="secao">Captura (corpo caído, sem boosts)</h2>
       <TabelaCaptura e={e} />
       {e.taxaRealCaptura !== null ? (

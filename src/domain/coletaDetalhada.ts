@@ -35,6 +35,10 @@ export interface ConsumoRegistrado {
   k: TipoConsumo;
   id?: number;
   shiny?: boolean;
+  sp?: number;
+  lv?: number;
+  q?: number;
+  v?: number;
 }
 
 export interface Acumulados {

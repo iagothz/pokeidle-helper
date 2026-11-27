@@ -152,6 +152,26 @@ describe('Coleta detalhada: linha do tempo de consumo', () => {
       { t: 5_000, k: 'captura', shiny: true },
     ]);
   });
+  it('grava espécie, nível, qualidade e venda automática de cada captura', () => {
+    const { r } = criar();
+    r.definirHunt('sunkern', 'Sunkern', 0);
+    r.processarEventos(
+      [
+        {
+          k: 'capturado',
+          pokemon: { speciesId: 191, level: 40, quality: 1.077, shiny: false },
+          vendidoAuto: 27_646,
+        },
+      ],
+      1_000,
+    );
+    r.processarEventos([{ k: 'capturado', pokemon: { speciesId: 191, level: 'x' } }], 2_000);
+    expect(r.sessaoAtual?.consumo).toEqual([
+      { t: 1_000, k: 'captura', sp: 191, lv: 40, q: 1.077, v: 27_646 },
+      { t: 2_000, k: 'captura', sp: 191 },
+    ]);
+    expect(r.sessaoAtual?.vendasAuto).toBe(27_646);
+  });
 });
 
 describe('Coleta detalhada: compatibilidade', () => {

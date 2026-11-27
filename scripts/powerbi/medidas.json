@@ -1,0 +1,339 @@
+{
+  "tabelas": {
+    "Medidas": "ROW ( \"oculta\", BLANK () )",
+    "dim_nivel": "DISTINCT (\n    UNION (\n        SELECTCOLUMNS ( fato_trecho, \"nivel\", fato_trecho[nivel] ),\n        SELECTCOLUMNS ( fato_abate, \"nivel\", fato_abate[nivel] ),\n        SELECTCOLUMNS ( FILTER ( fato_consumo, NOT ISBLANK ( fato_consumo[nivel] ) ), \"nivel\", fato_consumo[nivel] )\n    )\n)",
+    "Componentes Lucro": "DATATABLE ( \"Componente\", STRING, \"Ordem\", INTEGER, { { \"Gold dos abates\", 1 }, { \"Vendas auto\", 2 }, { \"Drops\", 3 }, { \"Bolas\", 4 }, { \"Poções e revives\", 5 } } )"
+  },
+  "relacionamentos": [
+    {
+      "de": "dim_hunt",
+      "coluna": "hunt_id",
+      "fatos": ["fato_sessao", "fato_trecho", "fato_abate", "fato_consumo", "fato_drop"]
+    },
+    {
+      "de": "dim_nivel",
+      "coluna": "nivel",
+      "fatos": ["fato_trecho", "fato_abate", "fato_consumo"]
+    }
+  ],
+  "medidas": [
+    {
+      "pasta": "Base",
+      "nome": "Horas Ativas",
+      "expressao": "DIVIDE ( SUM ( fato_sessao[ms_ativo] ), 3600000 )",
+      "formato": "#,0.00"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Sessões",
+      "expressao": "DISTINCTCOUNT ( fato_sessao[sessao_id] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "XP Pokémon",
+      "expressao": "SUM ( fato_sessao[xp_pokemon] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Gold Abates",
+      "expressao": "SUM ( fato_sessao[gold] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Vendas Auto",
+      "expressao": "SUM ( fato_sessao[vendas_auto] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Valor Drops",
+      "expressao": "SUM ( fato_sessao[valor_drops] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Custo Bolas",
+      "expressao": "SUM ( fato_sessao[custo_bolas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Custo Poções",
+      "expressao": "SUM ( fato_sessao[custo_pocoes] ) + SUM ( fato_sessao[custo_revives] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Lucro Líquido",
+      "expressao": "SUM ( fato_sessao[lucro_liquido] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Lucro Sem Drops",
+      "expressao": "[Lucro Líquido] - [Valor Drops]",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Abates",
+      "expressao": "SUM ( fato_sessao[abates] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Capturas",
+      "expressao": "SUM ( fato_sessao[capturas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Base",
+      "nome": "Bolas Usadas",
+      "expressao": "SUM ( fato_sessao[bolas_usadas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Por hora",
+      "nome": "XP/h",
+      "expressao": "DIVIDE ( [XP Pokémon], [Horas Ativas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Por hora",
+      "nome": "Gold/h",
+      "expressao": "DIVIDE ( [Gold Abates], [Horas Ativas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Por hora",
+      "nome": "Lucro Líquido/h",
+      "expressao": "DIVIDE ( [Lucro Líquido], [Horas Ativas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Por hora",
+      "nome": "Lucro Sem Drops/h",
+      "expressao": "DIVIDE ( [Lucro Sem Drops], [Horas Ativas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Por hora",
+      "nome": "Abates/h",
+      "expressao": "DIVIDE ( [Abates], [Horas Ativas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Por hora",
+      "nome": "Poções/h",
+      "expressao": "DIVIDE ( SUM ( fato_sessao[pocoes_usadas] ), [Horas Ativas] )",
+      "formato": "#,0.00"
+    },
+    {
+      "pasta": "Por hora",
+      "nome": "Desmaios/h",
+      "expressao": "DIVIDE ( SUM ( fato_sessao[desmaios] ), [Horas Ativas] )",
+      "formato": "#,0.00"
+    },
+    {
+      "pasta": "Por hora",
+      "nome": "Dano Recebido/h",
+      "expressao": "DIVIDE ( SUM ( fato_sessao[dano_recebido] ), [Horas Ativas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "Horas Trecho",
+      "expressao": "DIVIDE ( SUM ( fato_trecho[ms_ativo] ), 3600000 )",
+      "formato": "#,0.00"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "Golpes/Abate",
+      "expressao": "DIVIDE ( SUM ( fato_trecho[golpes_dados] ), SUM ( fato_trecho[abates] ) )",
+      "formato": "#,0.00"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "Dano/Abate",
+      "expressao": "DIVIDE ( SUM ( fato_trecho[dano_causado] ), SUM ( fato_trecho[abates] ) )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "XP/h Nível",
+      "expressao": "DIVIDE ( SUM ( fato_trecho[xp_pokemon] ), [Horas Trecho] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "Gold/h Nível",
+      "expressao": "DIVIDE ( SUM ( fato_trecho[gold] ), [Horas Trecho] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "Abates/h Nível",
+      "expressao": "DIVIDE ( SUM ( fato_trecho[abates] ), [Horas Trecho] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "Minutos no Nível",
+      "expressao": "DIVIDE ( SUM ( fato_trecho[ms_ativo] ), 60000 )",
+      "formato": "#,0.00"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "Duração Média do Abate (s)",
+      "expressao": "DIVIDE ( AVERAGE ( fato_abate[duracao_ms] ), 1000 )",
+      "formato": "#,0.00"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "XP Média por Abate",
+      "expressao": "AVERAGE ( fato_abate[xp] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "Poções/h Nível",
+      "expressao": "DIVIDE ( CALCULATE ( COUNTROWS ( fato_consumo ), fato_consumo[tipo] = \"pocao\" ), [Horas Trecho] )",
+      "formato": "#,0.00"
+    },
+    {
+      "pasta": "Nível",
+      "nome": "Abates (registros)",
+      "expressao": "COUNTROWS ( fato_abate )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Fases",
+      "nome": "Fases ms",
+      "expressao": "SUM ( fato_sessao[luta_ms] ) + SUM ( fato_sessao[deslocamento_ms] ) + SUM ( fato_sessao[espera_ms] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Fases",
+      "nome": "% Luta",
+      "expressao": "DIVIDE ( SUM ( fato_sessao[luta_ms] ), [Fases ms] )",
+      "formato": "0.0%"
+    },
+    {
+      "pasta": "Fases",
+      "nome": "% Deslocamento",
+      "expressao": "DIVIDE ( SUM ( fato_sessao[deslocamento_ms] ), [Fases ms] )",
+      "formato": "0.0%"
+    },
+    {
+      "pasta": "Fases",
+      "nome": "% Espera",
+      "expressao": "DIVIDE ( SUM ( fato_sessao[espera_ms] ), [Fases ms] )",
+      "formato": "0.0%"
+    },
+    {
+      "pasta": "Fases",
+      "nome": "Fases ms Trecho",
+      "expressao": "SUM ( fato_trecho[luta_ms] ) + SUM ( fato_trecho[deslocamento_ms] ) + SUM ( fato_trecho[espera_ms] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Fases",
+      "nome": "% Luta Nível",
+      "expressao": "DIVIDE ( SUM ( fato_trecho[luta_ms] ), [Fases ms Trecho] )",
+      "formato": "0.0%"
+    },
+    {
+      "pasta": "Fases",
+      "nome": "% Deslocamento Nível",
+      "expressao": "DIVIDE ( SUM ( fato_trecho[deslocamento_ms] ), [Fases ms Trecho] )",
+      "formato": "0.0%"
+    },
+    {
+      "pasta": "Fases",
+      "nome": "% Espera Nível",
+      "expressao": "DIVIDE ( SUM ( fato_trecho[espera_ms] ), [Fases ms Trecho] )",
+      "formato": "0.0%"
+    },
+    {
+      "pasta": "Fases",
+      "nome": "Segundos de Deslocamento por Onda",
+      "expressao": "DIVIDE ( SUM ( fato_sessao[deslocamento_ms] ), SUM ( fato_sessao[ondas] ) ) / 1000",
+      "formato": "#,0.00"
+    },
+    {
+      "pasta": "Fases",
+      "nome": "XP/h (só com fases)",
+      "expressao": "CALCULATE ( [XP/h], dim_sessao[fases_medidas] = TRUE () )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Captura",
+      "nome": "Taxa de Captura",
+      "expressao": "DIVIDE ( [Capturas], [Bolas Usadas] )",
+      "formato": "0.00%"
+    },
+    {
+      "pasta": "Captura",
+      "nome": "Bolas por Captura",
+      "expressao": "DIVIDE ( [Bolas Usadas], [Capturas] )",
+      "formato": "#,0.00"
+    },
+    {
+      "pasta": "Captura",
+      "nome": "Custo por Captura",
+      "expressao": "DIVIDE ( [Custo Bolas], [Capturas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Captura",
+      "nome": "Venda Média por Captura",
+      "expressao": "CALCULATE ( AVERAGE ( fato_consumo[valor_venda_auto] ), fato_consumo[tipo] = \"captura\", fato_consumo[valor_venda_auto] > 0 )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Captura",
+      "nome": "Saldo Autocatch",
+      "expressao": "[Vendas Auto] - [Custo Bolas]",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Captura",
+      "nome": "Saldo Autocatch/h",
+      "expressao": "DIVIDE ( [Saldo Autocatch], [Horas Ativas] )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Captura",
+      "nome": "Capturas (eventos)",
+      "expressao": "CALCULATE ( COUNTROWS ( fato_consumo ), fato_consumo[tipo] = \"captura\" )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Captura",
+      "nome": "Bolas (eventos)",
+      "expressao": "CALCULATE ( COUNTROWS ( fato_consumo ), fato_consumo[tipo] = \"bola\" )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Captura",
+      "nome": "Taxa de Captura (eventos)",
+      "expressao": "DIVIDE ( [Capturas (eventos)], [Bolas (eventos)] )",
+      "formato": "0.00%"
+    },
+    {
+      "pasta": "Captura",
+      "nome": "Saldo Autocatch Acumulado",
+      "expressao": "VAR ate = MAX ( fato_consumo[momento] )\nRETURN\n    CALCULATE (\n        SUM ( fato_consumo[valor_venda_auto] ) - SUM ( fato_consumo[custo] ),\n        fato_consumo[tipo] IN { \"captura\", \"bola\" },\n        fato_consumo[momento] <= ate,\n        REMOVEFILTERS ( fato_consumo[momento] )\n    )",
+      "formato": "#,0"
+    },
+    {
+      "pasta": "Lucro",
+      "nome": "Valor Componente",
+      "expressao": "SWITCH (\n    SELECTEDVALUE ( 'Componentes Lucro'[Componente] ),\n    \"Gold dos abates\", [Gold Abates],\n    \"Vendas auto\", [Vendas Auto],\n    \"Drops\", [Valor Drops],\n    \"Bolas\", - [Custo Bolas],\n    \"Poções e revives\", - [Custo Poções]\n)",
+      "formato": "#,0"
+    }
+  ]
+}

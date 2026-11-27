@@ -13,6 +13,21 @@ describe('previsaoDeNivel', () => {
     });
   });
 
+  it('com ritmo por faixas de bônus conta o vencimento do boost', () => {
+    const p = previsaoDeNivel(
+      { level: 9, xp: 1000, xpNivel: 1000, xpProximo: 3000 },
+      {
+        xpHBase: 500,
+        quem: 'xpTreinador',
+        faixas: [
+          { horas: 1, xpTreinador: 2, xpPokemon: 1 },
+          { horas: Infinity, xpTreinador: 1, xpPokemon: 1 },
+        ],
+      },
+    );
+    expect(p?.msAte).toBe(3 * HORA);
+  });
+
   it('sem ritmo positivo não estima o tempo', () => {
     expect(previsaoDeNivel({ level: 1, xp: 0, xpNivel: 0, xpProximo: 10 }, 0)?.msAte).toBeNull();
   });

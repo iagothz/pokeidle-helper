@@ -7,7 +7,7 @@ import { catalogos } from '../helpers/catalogos';
 import { logDeTeste } from '../helpers/log';
 import welcome from '../fixtures/welcome.json';
 
-function criarApp(salvas: Sessao[] = []) {
+function criarApp(salvas: Sessao[] = [], agora?: () => number) {
   const { log } = logDeTeste();
   const { especies, itens } = catalogos();
   return new Aplicacao({
@@ -22,7 +22,49 @@ function criarApp(salvas: Sessao[] = []) {
     especies,
     itens,
     versao: 'teste',
+    ...(agora ? { agora } : {}),
   });
+}
+
+function sessaoComTrechos(): Sessao {
+  const trechos = [1, 2, 3, 4, 5].map((lv) => ({
+    inicio: lv * 1000,
+    fim: lv * 1000 + 999,
+    pokemonId: '1',
+    level: lv,
+    tipoSazonal: null,
+    msAtivo: 30 * (3_000 + 1_000 * (6 - lv)),
+    abates: 30,
+    golpesDados: 30 * (1 + 6 - lv),
+    danoCausado: 0,
+    xpPokemon: 30 * 10,
+    gold: 30 * 5,
+    desmaios: 0,
+    fases: { lutaMs: 0, deslocamentoMs: 0, esperaMs: 0, ondas: 0 },
+  }));
+  return {
+    ...novaSessao('bellsprout', 'Bellsprout', 0),
+    id: 'com-trechos',
+    msAtivo: 1_000_000,
+    abates: 150,
+    aberta: false,
+    trechos,
+  };
+}
+
+function sessaoComAutocatch(): Sessao {
+  const capturas = [1, 2, 3, 4].map((t) => ({ t, k: 'captura' as const, sp: 69, v: 900 }));
+  return {
+    ...novaSessao('bellsprout', 'Bellsprout', 0),
+    id: 'autocatch',
+    msAtivo: 600_000,
+    abates: 200,
+    aberta: false,
+    bolas: { '1': 100 },
+    capturas: 4,
+    vendasAuto: 3_600,
+    consumo: capturas,
+  };
 }
 
 describe('Aplicacao com simulação de combate', () => {
@@ -67,7 +109,7 @@ describe('Aplicacao com simulação de combate', () => {
 
   it('lista as melhores hunts simuladas para um pokémon do time', () => {
     const app = criarApp();
-    app.receber(env(welcome, 0));
+    app.receber(env({ ...welcome, estado: { ...welcome.estado, level: 10 } }, 0));
     const r = app.melhoresHuntsPara('2', 'xp', 2);
     expect(r).toHaveLength(2);
     expect(r[0]!.xpPokemonH).toBeGreaterThanOrEqual(r[1]!.xpPokemonH);
@@ -75,6 +117,82 @@ describe('Aplicacao com simulação de combate', () => {
     expect(app.melhoresHuntsPara('999', 'xp', 5)).toEqual([]);
     const lucro = app.melhoresHuntsPara('2', 'gold', 3);
     expect(lucro[0]!.goldH).toBeGreaterThanOrEqual(lucro[1]!.goldH);
+  });
+  it('com boost ativo, a curva usa o XP base da hunt vezes o bônus e conta o vencimento', async () => {
+    const HORA = 3_600_000;
+    const AGORA = 1_800_000_000_000;
+    const relogio = () => AGORA;
+    const vence = AGORA + HORA;
+    const semBoost = criarApp([sessaoComTrechos()], relogio);
+    await semBoost.carregarHistorico();
+    semBoost.receber(env(welcome, 0));
+    const comBoost = criarApp([sessaoComTrechos()], relogio);
+    await comBoost.carregarHistorico();
+    comBoost.receber(
+      env(
+        {
+          ...welcome,
+          tiposBoost: [{ chave: 'pokexp', mult: 2 }],
+          estado: { ...welcome.estado, loja: { boosts: { pokexp: vence } } },
+        },
+        0,
+      ),
+    );
+    const sem = semBoost.modelo().progresso!;
+    const com = comBoost.modelo().progresso!;
+    expect(sem.curvaNivel!.curva.xpPorAbate).not.toBe(10);
+    expect(com.curvaNivel!.curva.xpPorAbate / sem.curvaNivel!.curva.xpPorAbate).toBeCloseTo(2, 10);
+    expect(com.curvaNivel!.bonus.xpBasePorAbate).toBe(sem.curvaNivel!.curva.xpPorAbate);
+    expect(com.curvaNivel!.bonus.faixas).toHaveLength(2);
+    expect(com.curvaNivel!.bonus.faixas[0]).toMatchObject({ xpPokemon: 2, xpTreinador: 1 });
+    expect(com.curvaNivel!.bonus.faixas[0]!.horas).toBe(1);
+    expect(com.ritmoPokemon.faixas).toEqual(com.curvaNivel!.bonus.faixas);
+    expect(com.bonus.ativos).toEqual([{ rotulo: 'boost XP pokémon', mult: 2, ate: vence }]);
+  });
+
+  it('projeta a progressão por nível do ativo na hunt atual a partir dos trechos', async () => {
+    const app = criarApp([sessaoComTrechos()]);
+    await app.carregarHistorico();
+    app.receber(env(welcome, 0));
+    const c = app.modelo().progresso?.curvaNivel;
+    expect(c?.huntNome).toBe('Bellsprout');
+    expect(c?.curva.amostra).toMatchObject({ niveis: 5, abates: 150 });
+    expect(c?.projecao.atual.level).toBe(5);
+    expect(c?.projecao.limiteNivel).toBe(9);
+    expect(c?.projecao.linhas.map((l) => l.level)).toEqual([6, 9]);
+  });
+
+  it('analisa o autocatch da hunt atual com as sessões salvas', async () => {
+    const app = criarApp([sessaoComAutocatch()]);
+    await app.carregarHistorico();
+    app.receber(env(welcome, 0));
+    const e = app.modelo().economia;
+    const a = e?.autocatch;
+    const poke = e?.chancesNaHunt.find((c) => c.bolaId === 1);
+    expect(poke).toMatchObject({ arremessos: 100, capturas: 4, medida: 0.04 });
+    expect(e?.fatorCaptura?.capturas).toBe(4);
+    expect(a?.amostra).toMatchObject({ bolas: 100, capturas: 4, capturasVendidas: 4 });
+    expect(a?.bolasPorCaptura).toBeCloseTo(1 / poke!.calibrada!, 6);
+    expect(a?.fonteBolasPorCaptura).toBe('medido');
+    expect(a?.bolasPorAbate).toBe(0.5);
+    expect(a?.valorPorCaptura).toBe(900);
+    expect(a?.gold).not.toBeNull();
+    expect(a?.pendencias).toEqual(['semTempo']);
+  });
+
+  it('sem trechos suficientes não há progressão por nível', () => {
+    const app = criarApp();
+    app.receber(env(welcome, 0));
+    expect(app.modelo().progresso?.curvaNivel).toBeNull();
+  });
+
+  it('não indica hunts acima do nível do treinador', () => {
+    const app = criarApp();
+    app.receber(env({ ...welcome, estado: { ...welcome.estado, level: 5 } }, 0));
+    const r = app.melhoresHuntsPara('2', 'xp', 10);
+    expect(r.length).toBeGreaterThan(0);
+    expect(r.every((h) => h.nivel <= 5)).toBe(true);
+    expect(r.map((h) => h.slug)).not.toContain('geodude');
   });
 });
 
@@ -141,6 +259,7 @@ describe('Aplicacao: logs para diagnóstico', () => {
     expect(resumo?.ctx).toHaveProperty('xpPokemonH');
     expect(resumo?.ctx).toHaveProperty('lucroRealH');
     expect(resumo?.ctx).toHaveProperty('calibracao');
+    expect(resumo?.ctx).toHaveProperty('curvaNivel', null);
   });
 });
 

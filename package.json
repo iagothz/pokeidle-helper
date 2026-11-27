@@ -1,6 +1,6 @@
 {
   "name": "pokeidle-helper",
-  "version": "0.9.0",
+  "version": "0.14.0",
   "private": true,
   "description": "Extensão que analisa as hunts do PokeIdle, dá dicas de XP, lucro e tipos e tem automações opcionais.",
   "type": "module",

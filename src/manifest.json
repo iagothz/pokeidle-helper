@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "description": "Analisa suas hunts no PokeIdle: XP/h, lucro, consumíveis e dicas de tipo, com automações opcionais.",
   "minimum_chrome_version": "111",
-  "permissions": ["storage", "downloads"],
+  "permissions": ["storage", "downloads", "downloads.ui"],
   "host_permissions": ["https://pokeidle.io/*"],
   "content_scripts": [
     {

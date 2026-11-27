@@ -57,7 +57,7 @@ O helper precisa estar ativo **antes** do login, porque os dados de hunts chegam
 Cores: uma escala contínua do **vermelho** (ruim) ao **branco** (intermediário) e ao **verde** (bom); quanto mais forte a cor, mais longe do meio. Na hunt atual, XP/h, lucro, gold e abates são coloridos pela posição entre as outras hunts liberadas pelo nível do seu treinador, ajustada pela sua média histórica na mesma hunt; o motivo aparece embaixo do número. A bolinha no botão **PH** resume a sessão (vermelha com lucro negativo, desmaios, muito dano super efetivo ou consumíveis acabando).
 
 - **PH** abre e fecha o painel. O botão fica laranja quando há um aviso, desvantagem de tipo ou muitos golpes super efetivos recebidos.
-- Arraste o painel pelo cabeçalho e use **–** / **+** para minimizar e restaurar. Posição, estado e última aba ficam salvos.
+- Arraste o painel pelo cabeçalho, use **↙** / **↗** para diminuir e aumentar o tamanho e **–** / **+** para minimizar e restaurar. Posição, tamanho, estado, última aba e os filtros de cada aba (ordenação, "até o nível do ativo", pokémon simulado, hunt do histórico e níveis-alvo) ficam salvos.
 - **Sessão:** métricas da hunt atual, onde vai o tempo (lutando, andando, esperando onda) e golpes reais por abate, desmaios, XP perdido, taxa de captura, próximo nível do treinador e do ativo, autonomia de consumíveis e drops. Só o tempo ativo conta: pausas maiores que 60 s entre eventos de batalha são descontadas.
 - **Hunts:** o selo de cada linha diz de onde vem o número:
   - `real`: média das suas sessões, com pelo menos 15 min acumulados;
@@ -65,9 +65,9 @@ Cores: uma escala contínua do **vermelho** (ruim) ao **branco** (intermediário
   - `simulado`: simulação de combate do seu pokémon ativo naquela hunt, calibrada pelo seu ritmo real; mostra segundos e golpes por abate;
   - `estimado`: fórmulas do jogo ajustadas pelo seu ritmo médio nas hunts reais;
   - `teto teórico`: fórmulas do jogo sem ajuste (antes de você ter qualquer hunt medida).
-- **Time:** simulação do seu time na hunt atual (XP/h, abates/h, golpes e segundos por abate, quanto aguenta sem poção) e as melhores hunts para o pokémon que você escolher.
-- **Progresso:** metas de nível com tempo estimado, evolução do ativo, pokémons travados pelo nível do treinador e custo de refino.
-- **Economia:** captura por bola e espécie, melhor bola, shiny, pedras/h e ovo shiny da hunt atual.
+- **Time:** simulação do seu time na hunt atual (XP/h, abates/h, golpes e segundos por abate, quanto aguenta sem poção) e as melhores hunts, liberadas pelo nível do treinador, para o pokémon que você escolher.
+- **Progresso:** metas de nível com tempo estimado (pela curva da hunt atual quando há dados), progressão por nível na hunt atual (golpes, XP/h, gold/h e tempo para os próximos níveis, e quanto do teto da hunt você já atingiu), evolução do ativo, pokémons travados pelo nível do treinador e custo de refino.
+- **Economia:** se vale ligar o autocatch e vender (gold líquido/h e variação de XP/h, calibrados pelas suas sessões e pela Auto Venda do Depot), chance real de captura por bola (fórmula, medida e calibrada), captura por bola e espécie, melhor bola, shiny, pedras/h e ovo shiny da hunt atual.
 - **Histórico:** todas as sessões salvas (de 50 em 50, com "Mostrar mais"), filtro por hunt e resumo do período filtrado.
 - **Automação:** chave geral e uma chave por automação.
   - **Viagem:** com ela ligada, clique numa linha da aba **Hunts**. O helper reenvia a troca a cada 1 s (o jogo só deixa trocar depois de 3 s sem receber dano) e para ao chegar, depois de 60 s, se você trocar de hunt manualmente ou clicar em **Cancelar**.
@@ -134,19 +134,20 @@ Mais detalhes em [`docs/arquitetura.md`](docs/arquitetura.md) e [`docs/protocolo
 
 ## Backup em arquivo
 
-Com o backup automático ligado (padrão), cada sessão encerrada regrava `Downloadspokeidle-helperpokeidle-helper-backup.json` com **todas** as sessões. O navegador só permite gravar dentro da pasta Downloads. Para restaurar ou levar para outro PC, use **Opções → Importar backup** e escolha o arquivo (ou todas as partes, se o backup foi dividido). A importação mescla sem duplicar.
+Com o backup automático ligado (padrão), cada sessão encerrada regrava `Downloadspokeidle-helperpokeidle-helper-backup.json` com **todas** as sessões. O navegador só permite gravar dentro da pasta Downloads. Para restaurar ou levar para outro PC, use **Opções → Importar backup** e escolha o arquivo (ou todas as partes, se o backup foi dividido). A importação mescla sem duplicar. A gravação é silenciosa: o navegador não abre a barra de downloads e o arquivo não fica no histórico de downloads.
 
 A permissão `downloads` existe só para isso; o service worker grava apenas esse nome de arquivo fixo e aceita mensagens só da própria extensão.
 
 ## Privacidade
 
-Tudo fica no seu navegador: as sessões e os logs no IndexedDB de `pokeidle.io` e a configuração e as preferências do painel (posição, minimizado, aba) no `chrome.storage.local`. Antes de qualquer processamento, a captura remove campos como `token`, `email`, `cpf`, `carteira` e `ip`. Nada é enviado a lugar nenhum.
+Tudo fica no seu navegador: as sessões e os logs no IndexedDB de `pokeidle.io` e a configuração e as preferências do painel (posição, minimizado, aba, filtros) no `chrome.storage.local`. Antes de qualquer processamento, a captura remove campos como `token`, `email`, `cpf`, `carteira` e `ip`. Nada é enviado a lugar nenhum.
 
 ## Limitações conhecidas
 
 - O formato das mensagens foi conferido na versão 1.492.0 do jogo. Quando o jogo é atualizado, o painel avisa que a versão mudou e mostra a nova em **Opções → Versão do jogo**. Mudanças no protocolo podem fazer o helper ignorar dados; isso aparece em **Opções → Eventos ignorados** e nos logs.
 - O simulador usa as fórmulas do código compartilhado do jogo, mas os IVs e a qualidade dos selvagens são sorteados no servidor: o helper usa a média (IV 16,5 e qualidade ≈ 1,18) e corrige pela calibração com as suas sessões (mediana de real ÷ simulado). O dia sazonal entra no dano; Prey, bestiário e pódio de ginásio não. A calibração usa os golpes reais por abate e os tempos medidos de deslocamento e espera de onda. Com TM de área, supõe metade da onda atingida por golpe.
 - As estimativas aplicam os bônus ativos **agora** (VIP, boosts, guild, evento de farm); as linhas `real` ficam com os bônus que você tinha quando caçou.
+- Os tempos até um nível partem do XP base da hunt e aplicam cada bônus só até ele vencer: com um boost de 43 min, a primeira parte da meta corre com o boost e o resto sem ele. A aba Progresso mostra os bônus ativos e quando cada um vence.
 - Desde 15/10/2026 o loot de itens não vira gold e o NPC não compra os drops especiais (tokens, fragmentos): o helper mostra só a frequência deles.
 - A chance de captura não inclui boosts aplicados pelo servidor (Capture Boost, Kick, Prey, Safari); compare com a sua taxa real mostrada na mesma aba.
 - A autonomia supõe o ritmo de consumo atual e só aparece depois de 5 min ativos e 3 usos de cada item; bolas aparecem na tabela mas não limitam a permanência.

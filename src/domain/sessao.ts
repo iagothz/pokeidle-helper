@@ -352,11 +352,7 @@ export class RastreadorSessao {
         this.consumir(s, 'bola', em, ev.ballId);
         break;
       case 'capturado':
-        anexarLimitado(s.consumo, {
-          t: em,
-          k: 'captura',
-          ...(ev.pokemon?.shiny ? { shiny: true } : {}),
-        });
+        anexarLimitado(s.consumo, capturaRegistrada(em, ev.pokemon, ev.vendidoAuto));
         break;
       default:
         break;
@@ -477,4 +473,34 @@ export class RastreadorSessao {
       });
     }
   }
+}
+
+const positivo = (v: number | undefined) =>
+  v !== undefined && Number.isFinite(v) && v > 0 ? v : undefined;
+
+function capturaRegistrada(
+  t: number,
+  pk:
+    | {
+        shiny?: boolean | undefined;
+        speciesId?: number | undefined;
+        level?: number | undefined;
+        quality?: number | undefined;
+      }
+    | undefined,
+  vendido: number | undefined,
+): ConsumoRegistrado {
+  const sp = positivo(pk?.speciesId);
+  const lv = positivo(pk?.level);
+  const q = positivo(pk?.quality);
+  const v = positivo(vendido);
+  return {
+    t,
+    k: 'captura',
+    ...(pk?.shiny ? { shiny: true } : {}),
+    ...(sp !== undefined ? { sp } : {}),
+    ...(lv !== undefined ? { lv } : {}),
+    ...(q !== undefined ? { q } : {}),
+    ...(v !== undefined ? { v } : {}),
+  };
 }

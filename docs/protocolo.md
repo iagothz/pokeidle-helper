@@ -95,6 +95,7 @@ Eventos só de raid (`queda`, `onda`, `gmax`, `marco`, `fora`) não são usados.
 - **Fator** (`shared/captura-degrau.mjs`): espécie que aparece em hunt usa o degrau do teto de captura (20 → 2,8669; 40 → 3,5745; 100 → 4,4681); as outras, `1 + (log10(max(100, priceNpc)) − 1)³ / raridadeDiv`. O teto vem da posição na cadeia evolutiva (`shared/teto-captura.mjs`: 1 elo [100], 2 [40,100], 3 [20,40,100], 4 [20,40,70,100]).
 - **Shiny:** `welcome.chanceShiny` por arremesso (Shiny Lure dobra).
 - **Venda automática:** o evento `capturado` traz `vendidoAuto` (gold) quando o pokémon é vendido no depot.
+- **Preço de venda** (`shared/sell-value.mjs`, `precoVendaPokemon`): `floor(base · (1 + min(nível, 100)/50) · qualidade · (shiny ? 10 : 1))`. A base é `PRECO_NPC_FIXO` quando existe; senão o valor econômico da espécie (sellValue/priceNpc até 500 000, ou `12000 · (huntLevel/150)^0,6`), limitado a `ouroDoNivel(2500)`. Conferido no Market: Scyther nv 100 Q 1,002 → 180 360; Sunkern nv 40 Q 1,077 → 27 646 (base 14 262 = `ouroDoNivel(200)`).
 - **Loot:** desde 15/10/2026 os selvagens só largam pedras de evolução (`shared/loot-pedras.mjs`): uma por tipo distinto (Ghost e Dark dão a mesma), com 0,2/0,35/0,5% conforme o estágio. Os drops especiais não são vendidos ao NPC.
 - **Fragmento de ovo shiny** (`shared/ovo-shiny.mjs`): fora do Outland, a partir do nível 5000, `1/150000 · (1 + 0,04·(degrau−1))`, 32 degraus até 160 300; 10 fragmentos fazem um ovo.
 - **Curva de XP** (`shared/boost-atrasados.mjs`): `xpTotal(L) = round(50/3 · (L³ − 6L² + 17L − 12))`. Pokémon só luta com nível ≤ treinador + 5 (`shared/pokemon-nivel-treinador.mjs`). Refino: próximo passo `500·(3n²+3n+1)`, total `500·n³`.
@@ -121,10 +122,43 @@ Cada sessão grava `sazonal: { tipo, escudo }` do momento em que começou, e a c
 
 Além dos totais, cada sessão guarda três listas (até 50 000 registros cada):
 
-| Campo           | Um registro por                              | Campos                                                                                                                                            |
-| --------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `trechos`       | nível (ou pokémon) do ativo dentro da sessão | `inicio`, `fim`, `pokemonId`, `level`, `tipoSazonal`, `msAtivo`, `abates`, `golpesDados`, `danoCausado`, `xpPokemon`, `gold`, `desmaios`, `fases` |
-| `abatesDetalhe` | selvagem derrotado                           | `t` horário, `lv` nível do ativo, `g` golpes, `d` dano, `l` ms do 1º golpe à morte, `xp`, `o` ouro                                                |
-| `consumo`       | poção, revive, bola, captura ou desmaio      | `t` horário, `k` tipo (`pocao`, `revive`, `bola`, `captura`, `desmaio`), `id` do item, `shiny`                                                    |
+| Campo           | Um registro por                              | Campos                                                                                                                                                                                |
+| --------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trechos`       | nível (ou pokémon) do ativo dentro da sessão | `inicio`, `fim`, `pokemonId`, `level`, `tipoSazonal`, `msAtivo`, `abates`, `golpesDados`, `danoCausado`, `xpPokemon`, `gold`, `desmaios`, `fases`                                     |
+| `abatesDetalhe` | selvagem derrotado                           | `t` horário, `lv` nível do ativo, `g` golpes, `d` dano, `l` ms do 1º golpe à morte, `xp`, `o` ouro                                                                                    |
+| `consumo`       | poção, revive, bola, captura ou desmaio      | `t` horário, `k` tipo (`pocao`, `revive`, `bola`, `captura`, `desmaio`), `id` do item, `shiny`; capturas também `sp` espécie, `lv` nível, `q` qualidade, `v` gold da venda automática |
 
 Golpes e dano de um abate são os seus `ataque` desde o abate anterior; com vários selvagens vivos ao mesmo tempo, a divisão entre eles é aproximada. O trecho em andamento entra nos checkpoints (a cada 30 s no navegador) e, com o backup automático ligado, a sessão aberta vai para o arquivo a cada 5 min.
+
+## Progressão por nível (ajuste dos trechos)
+
+A aba Progresso junta os trechos do ativo na hunt atual (mesmo `pokemonId`, `huntSlug` e `tipoSazonal`), soma os trechos de cada nível e descarta níveis com menos de 20 abates. Com pelo menos 5 níveis, ajusta por mínimos quadrados ponderados pelos abates:
+
+- `ln(golpes por abate − 1) = a + b · nível`: o excesso sobre um golpe cai de forma exponencial com o nível;
+- `segundos por abate = a + b · golpes por abate`: o ciclo inclui luta, deslocamento e espera de onda.
+
+O teto da hunt é o ciclo com 1 golpe por abate. XP e ouro por abate vêm do trecho mais recente, para refletir bônus ativos. O tempo até cada nível soma, nível a nível, o XP da curva do jogo dividido pelo XP/h projetado naquele nível. A projeção para no nível do treinador + 5.
+
+Usamos médias por trecho, e não a distribuição de golpes de cada abate: com vários selvagens vivos, os golpes de um abate isolado podem pertencer a outro alvo.
+
+## Autocatch: vale capturar e vender?
+
+Para a hunt atual, o helper junta as sessões salvas e a ao vivo:
+
+- **Bolas por captura:** total de bolas ÷ capturas, com pelo menos 3 capturas; antes disso, `1 / chance` da fórmula de captura para a bola mais usada, ponderada pelas espécies da hunt.
+- **Bolas por abate:** bolas ÷ abates das sessões em que houve bola.
+- **Venda por captura:** média de `v` (Auto Venda do Depot) nas capturas registradas. Sem Auto Venda não há valor medido, e o veredito não aparece.
+- **Atraso por abate:** um trecho é "com bola" quando há arremesso entre o início e o fim dele. O ciclo dos trechos sem bola do ativo é ajustado como na progressão por nível (`segundos = a + b · golpes`); o atraso é a média, por abate, do tempo real dos trechos com bola menos o ciclo previsto para os golpes medidos neles.
+- **Resultado por hora**, com `abates/h com = 3600 / (3600/abates/h sem + atraso)`: vendas = bolas/h ÷ bolas por captura × venda; gasto = bolas/h × custo médio da bola; perda = (abates/h sem − com) × ouro por abate; gold líquido = vendas − gasto − perda; variação de XP/h = (abates/h com − sem) × XP por abate.
+
+## Calibração da captura
+
+- **Amostras:** por hunt e bola, arremessos (`bolas`) e capturas. Numa sessão com uma bola só, todas as capturas são dela; com várias, cada captura vai para a última bola arremessada antes dela na linha do tempo `consumo`. Sessões antigas com várias bolas e sem linha do tempo ficam de fora.
+- **Fórmula:** a chance do jogo para a bola, ponderada pelas espécies da hunt (igual à do cliente, `app.js chanceDeCaptura`, que não aplica bônus).
+- **Fator global:** `(capturas + 3) / (esperadas + 3)`, com esperadas = Σ arremessos × fórmula em todas as hunts com amostra.
+- **Chance usada:** média de uma Beta com prior de 3 capturas centrado na fórmula × fator: `(capturas + 3) / (arremessos + 3 / (fórmula · fator))`. Com pouca amostra fica perto da fórmula; com muita, vira a medida. A faixa de 95% da medida é a de Wilson.
+- 27/11/2026: Sunflora com Ultra Ball mediu 10 capturas em 487 arremessos (2,05%; faixa 1,1–3,7%) contra 0,94% da fórmula.
+
+## Metas de nível pela curva
+
+Com a curva da hunt atual (ver "Progressão por nível"), o tempo até um nível-alvo do treinador ou do ativo é simulado por eventos: a cada passo o ativo ganha o XP/h da curva no nível dele, o treinador ganha esse XP × (XP/h do treinador ÷ XP/h do ativo na sessão), e o próximo evento é quem sobe de nível primeiro. O ativo não passa de treinador + 5; travado, só o treinador avança. Sem curva, vale o ritmo constante da sessão ou da simulação.
