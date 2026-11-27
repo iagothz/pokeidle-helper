@@ -150,6 +150,10 @@ export class EstadoJogo {
       escudoSazonal: Number.isFinite(alvo) && alvo > 1 && Number.isFinite(nivel) && nivel < alvo,
     };
   }
+  get fimDiaSazonal(): number | null {
+    const fim = ehObjeto(this.bruto.diaSazonal) ? Number(this.bruto.diaSazonal.fim) : NaN;
+    return Number.isFinite(fim) && fim > 0 ? fim : null;
+  }
   get captura(): ParametrosCaptura {
     return this._captura;
   }

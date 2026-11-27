@@ -1,8 +1,17 @@
 import type { Logger } from '../shared/logger';
+import {
+  ContadorAbate,
+  TrechoAberto,
+  anexarLimitado,
+  type AbateRegistrado,
+  type ConsumoRegistrado,
+  type IdentidadeTrecho,
+  type Trecho,
+} from './coletaDetalhada';
 import { FASES_ZERADAS, MedidorFases, type Fases } from './medidorFases';
 import { idPositivo, lerEvento, type Evento } from './schemas';
 
-export const VERSAO_SESSAO = 4;
+export const VERSAO_SESSAO = 5;
 export const EF_SUPER_EFETIVO = 2;
 const ENTRADA_BOSS_PADRAO = { itemId: 70000, qtd: 1 };
 
@@ -38,13 +47,23 @@ export interface Sessao {
   danoCausado: number;
   fases: Fases;
   pokemon?: PokemonDaSessao;
+  sazonal?: SazonalDaSessao;
+  trechos: Trecho[];
+  abatesDetalhe: AbateRegistrado[];
+  consumo: ConsumoRegistrado[];
   aberta: boolean;
+}
+
+export interface SazonalDaSessao {
+  tipo: string | null;
+  escudo: boolean;
 }
 
 export interface PokemonDaSessao {
   id: string;
   speciesId?: number;
   level?: number;
+  levelFinal?: number;
 }
 
 export interface OpcoesRastreador {
@@ -107,6 +126,9 @@ export function novaSessao(slug: string, nome: string, inicio: number): Sessao {
     golpesDados: 0,
     danoCausado: 0,
     fases: { ...FASES_ZERADAS },
+    trechos: [],
+    abatesDetalhe: [],
+    consumo: [],
     aberta: true,
   };
 }
@@ -126,6 +148,9 @@ export function normalizarSessao(s: Sessao): Sessao {
     golpesDados: s.golpesDados ?? 0,
     danoCausado: s.danoCausado ?? 0,
     fases: s.fases ?? { ...FASES_ZERADAS },
+    trechos: s.trechos ?? [],
+    abatesDetalhe: s.abatesDetalhe ?? [],
+    consumo: s.consumo ?? [],
   };
 }
 
@@ -135,6 +160,8 @@ export class RastreadorSessao {
   private readonly agora: () => number;
   private invalidos = 0;
   private readonly medidor: MedidorFases;
+  private readonly contadorAbate = new ContadorAbate();
+  private trecho: TrechoAberto | null = null;
 
   constructor(
     private readonly opcoes: OpcoesRastreador,
@@ -156,10 +183,47 @@ export class RastreadorSessao {
     if (slug === (this.atual?.huntSlug ?? null)) return;
     this.encerrar('troca de hunt', em);
     if (!slug) return;
-    this.atual = novaSessao(slug, nome ?? this.opcoes.nomeDaHunt(slug) ?? slug, em);
+    this.iniciar(slug, nome ?? this.opcoes.nomeDaHunt(slug) ?? slug, em, {});
+  }
+
+  private iniciar(slug: string, nome: string, em: number, identidade: IdentidadeTrecho) {
+    this.atual = novaSessao(slug, nome, em);
     this.ultimoEventoEm = null;
     this.medidor.reiniciar();
+    this.contadorAbate.reiniciar();
+    this.trecho = new TrechoAberto(em, this.atual, identidade);
     this.log.info('Sessão iniciada', { hunt: slug });
+  }
+
+  private get ultimoMomento(): number {
+    return this.ultimoEventoEm ?? this.atual?.inicio ?? this.agora();
+  }
+
+  private trechosCom(s: Sessao, fim: number): Trecho[] {
+    return this.trecho ? [...s.trechos, this.trecho.fechar(fim, s)] : s.trechos;
+  }
+
+  private virarTrecho(identidade: IdentidadeTrecho) {
+    const s = this.atual;
+    if (!s || !this.trecho) return;
+    const fim = this.ultimoMomento;
+    const fechado = this.trecho.fechar(fim, s);
+    s.trechos.push(fechado);
+    this.log.info('Nível do pokémon mudou', {
+      pokemonId: identidade.pokemonId,
+      de: fechado.level,
+      para: identidade.level,
+      abates: fechado.abates,
+      golpesPorAbate: fechado.abates > 0 ? fechado.golpesDados / fechado.abates : null,
+      msAtivo: fechado.msAtivo,
+      xpPokemon: fechado.xpPokemon,
+      gold: fechado.gold,
+      fases: fechado.fases,
+    });
+    this.trecho = new TrechoAberto(fim, s, {
+      ...identidade,
+      ...(s.sazonal ? { tipoSazonal: s.sazonal.tipo } : {}),
+    });
   }
 
   processarEventos(brutos: readonly unknown[], em: number): void {
@@ -180,6 +244,7 @@ export class RastreadorSessao {
       if (!this.atual) continue;
       if (EVENTOS_DE_COMBATE.has(ev.k)) this.registrarAtividade(em);
       this.contar(this.atual, ev);
+      this.detalhar(this.atual, ev, em);
       this.medidor.registrar(ev, em);
       this.atual.fases = this.medidor.resultado();
     }
@@ -256,6 +321,54 @@ export class RastreadorSessao {
     }
   }
 
+  private detalhar(s: Sessao, ev: Evento, em: number) {
+    switch (ev.k) {
+      case 'ataque':
+        if (ev.por === 'jogador') this.contadorAbate.golpe(Math.max(0, ev.dano ?? 0), em);
+        break;
+      case 'morte':
+        if (ev.quem === 'jogador') {
+          anexarLimitado(s.consumo, { t: em, k: 'desmaio' });
+          break;
+        }
+        if (ev.quem !== 'selvagem') break;
+        anexarLimitado(
+          s.abatesDetalhe,
+          this.contadorAbate.abate(
+            em,
+            ev.xpPokemon ?? ev.xp ?? 0,
+            ev.ouro ?? 0,
+            this.trecho?.identidade.level,
+          ),
+        );
+        break;
+      case 'cura':
+        this.consumir(s, 'pocao', em, ev.itemId);
+        break;
+      case 'revive':
+        this.consumir(s, 'revive', em, ev.itemId);
+        break;
+      case 'bola':
+        this.consumir(s, 'bola', em, ev.ballId);
+        break;
+      case 'capturado':
+        anexarLimitado(s.consumo, {
+          t: em,
+          k: 'captura',
+          ...(ev.pokemon?.shiny ? { shiny: true } : {}),
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  private consumir(s: Sessao, k: 'pocao' | 'revive' | 'bola', em: number, idBruto: unknown) {
+    const id = idPositivo(idBruto);
+    if (id === null) return;
+    anexarLimitado(s.consumo, { t: em, k, id });
+  }
+
   private somarDrops(
     s: Sessao,
     drops: { itemId?: number | undefined; nome?: string | undefined; qtd?: number | undefined }[],
@@ -271,14 +384,65 @@ export class RastreadorSessao {
     }
   }
 
+  sessaoAoVivo(agora: number): Sessao | null {
+    const s = this.atual;
+    if (!s) return null;
+    const pendente =
+      this.ultimoEventoEm !== null && agora > this.ultimoEventoEm
+        ? Math.min(agora - this.ultimoEventoEm, this.opcoes.pausaMaximaMs)
+        : 0;
+    const aoVivo = { ...s, msAtivo: s.msAtivo + pendente, fases: this.medidor.previa(agora) };
+    return { ...aoVivo, trechos: this.trechosCom(aoVivo, Math.max(agora, this.ultimoMomento)) };
+  }
+
+  registrarSazonal(z: SazonalDaSessao): void {
+    const s = this.atual;
+    if (!s) return;
+    if (!s.sazonal) {
+      s.sazonal = { ...z };
+      this.trecho?.identificar({ tipoSazonal: z.tipo });
+      return;
+    }
+    if (s.sazonal.tipo === z.tipo && s.sazonal.escudo === z.escudo) return;
+    const em = this.ultimoMomento;
+    const identidade = { ...(this.trecho?.identidade ?? {}), tipoSazonal: z.tipo };
+    const pokemon = s.pokemon;
+    this.log.info('Dia sazonal mudou; sessão dividida', { de: s.sazonal, para: z });
+    this.encerrar('troca do dia sazonal', em);
+    this.iniciar(s.huntSlug, s.huntNome, em, identidade);
+    const nova = this.atual as Sessao | null;
+    if (!nova) return;
+    nova.sazonal = { ...z };
+    if (!pokemon) return;
+    const level = identidade.level ?? pokemon.levelFinal ?? pokemon.level;
+    nova.pokemon = {
+      id: pokemon.id,
+      ...(pokemon.speciesId !== undefined ? { speciesId: pokemon.speciesId } : {}),
+      ...(level !== undefined ? { level } : {}),
+    };
+  }
+
   registrarPokemon(p: PokemonDaSessao): void {
-    if (this.atual && !this.atual.pokemon) this.atual.pokemon = { ...p };
+    const s = this.atual;
+    if (!s) return;
+    const identidade: IdentidadeTrecho = {
+      pokemonId: p.id,
+      ...(p.level !== undefined ? { level: p.level } : {}),
+    };
+    if (this.trecho?.muda(identidade)) this.virarTrecho(identidade);
+    else this.trecho?.identificar(identidade);
+    if (!s.pokemon) {
+      s.pokemon = { ...p };
+      return;
+    }
+    if (s.pokemon.id === p.id && p.level !== undefined && p.level !== s.pokemon.level)
+      s.pokemon = { ...s.pokemon, levelFinal: p.level };
   }
 
   checkpoint(): void {
     const s = this.atual;
     if (!s || s.msAtivo < this.opcoes.sessaoMinimaMs) return;
-    this.salvar({ ...s, aberta: true });
+    this.salvar({ ...s, trechos: this.trechosCom(s, this.ultimoMomento), aberta: true });
   }
 
   encerrar(motivo: string, em = this.agora()): void {
@@ -286,6 +450,8 @@ export class RastreadorSessao {
     if (!s) return;
     this.medidor.fechar(Math.min(em, s.fim + this.opcoes.pausaMaximaMs));
     s.fases = this.medidor.resultado();
+    s.trechos = this.trechosCom(s, s.fim);
+    this.trecho = null;
     this.atual = null;
     this.ultimoEventoEm = null;
     s.fim = Math.max(s.fim, Math.min(em, s.fim + this.opcoes.pausaMaximaMs));

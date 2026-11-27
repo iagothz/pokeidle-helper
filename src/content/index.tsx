@@ -54,6 +54,7 @@ async function carregarPreferencias(): Promise<PreferenciasUi> {
 let preferenciasAtuais: PreferenciasUi = lerPreferencias(undefined);
 let backupAgendado: number | null = null;
 const ESPERA_BACKUP_MS = 3_000;
+const BACKUP_PERIODICO_MS = 5 * 60_000;
 
 function enviarAoServiceWorker(m: MensagemBackup): Promise<RespostaBackup> {
   return chrome.runtime.sendMessage(m) as Promise<RespostaBackup>;
@@ -158,6 +159,11 @@ async function iniciar() {
 
   const checkpoint = window.setInterval(() => app.checkpoint(), 30_000);
   const descarga = window.setInterval(() => void destinoBanco?.descarregar(), config.logs.flushMs);
+  const backupPeriodico = window.setInterval(() => {
+    if (!preferenciasAtuais.backupAutomatico || !app.rastreador.sessaoAtual) return;
+    app.checkpoint();
+    agendarBackup();
+  }, BACKUP_PERIODICO_MS);
   window.addEventListener('pagehide', () => {
     app.checkpoint();
     void destinoBanco?.descarregar();
@@ -207,6 +213,7 @@ async function iniciar() {
     pararPonte();
     clearInterval(checkpoint);
     clearInterval(descarga);
+    clearInterval(backupPeriodico);
   };
 }
 

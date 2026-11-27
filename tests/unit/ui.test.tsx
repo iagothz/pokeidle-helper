@@ -12,13 +12,17 @@ import { logDeTeste } from '../helpers/log';
 import { PREFERENCIAS_PADRAO, type PreferenciasUi } from '../../src/shared/preferencias';
 
 const esperar = (ms = 300) => new Promise((r) => setTimeout(r, ms));
-const env = (dados: unknown, recebidoEm: number) => ({
-  origem: 'pokeidle-helper' as const,
-  v: 1 as const,
-  tipo: 'mensagem' as const,
-  recebidoEm,
-  dados,
-});
+const relogio = { agora: 0 };
+const env = (dados: unknown, recebidoEm: number) => {
+  relogio.agora = recebidoEm;
+  return {
+    origem: 'pokeidle-helper' as const,
+    v: 1 as const,
+    tipo: 'mensagem' as const,
+    recebidoEm,
+    dados,
+  };
+};
 
 function criarApp() {
   const { log } = logDeTeste();
@@ -36,6 +40,7 @@ function criarApp() {
     especies,
     itens,
     versao: '0.1.0-teste',
+    agora: () => relogio.agora,
   });
 }
 
@@ -347,6 +352,34 @@ describe('painel', () => {
     expect(texto).toMatch(/Esperando onda\s*29%/);
     expect(texto).toMatch(/2 golpes por abate/);
     expect(ui.raiz.querySelector('.barra-fases')).not.toBeNull();
+  });
+
+  it('XP/h cai ao vivo enquanto o pokémon não bate, sem esperar evento do jogo', async () => {
+    const app = criarApp();
+    const ui = montarInterface(document, app, acoesFalsas());
+    desmontar = ui.desmontar;
+    clicar(ui.raiz, 'PH');
+    await esperar(10);
+    app.receber(env(welcome, 0));
+    for (const t of [0, 30_000, 60_000, 90_000])
+      app.receber(env({ t: 'batalha', ev: [{ k: 'spawn', speciesId: 69 }] }, t));
+    app.receber(
+      env(
+        { t: 'batalha', ev: [{ k: 'morte', quem: 'selvagem', xp: 9000, ouro: 41, drops: [] }] },
+        120_000,
+      ),
+    );
+    await esperar();
+    const xpH = () =>
+      [...ui.raiz.querySelectorAll('.kpi')]
+        .find((k) => k.textContent?.includes('XP/H') || k.textContent?.includes('XP/h'))
+        ?.querySelector('.kpi-valor')?.textContent;
+    const antes = xpH();
+    relogio.agora = 180_000;
+    await esperar(1_100);
+    const depois = xpH();
+    expect(antes).toMatch(/^270\s?mil$/);
+    expect(depois).toMatch(/^180\s?mil$/);
   });
 
   it('aba Economia: captura por bola, melhor bola, shiny e pedras', async () => {

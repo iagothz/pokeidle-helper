@@ -51,6 +51,16 @@ export function montarResumoSessao(e: EntradaResumo): Record<string, unknown> {
       deslocamentoPorAbateS: porAbate(f.deslocamentoMs / 1000, s.abates),
       esperaPorOndaS: f.ondas > 0 ? arred(f.esperaMs / 1000 / f.ondas) : null,
     },
+    porNivel: (s.trechos ?? []).map((tr) => ({
+      level: tr.level ?? null,
+      minutos: arred(tr.msAtivo / 60_000, 1),
+      abates: tr.abates,
+      golpesPorAbate: porAbate(tr.golpesDados, tr.abates),
+      lutaPorAbateS: porAbate(tr.fases.lutaMs / 1000, tr.abates),
+      xpPokemonH: tr.msAtivo > 0 ? Math.round(tr.xpPokemon / (tr.msAtivo / 3_600_000)) : null,
+    })),
+    abatesDetalhados: s.abatesDetalhe?.length ?? 0,
+    consumosDetalhados: s.consumo?.length ?? 0,
     simulado: e.simulado
       ? {
           abatesH: Math.round(e.simulado.abatesH),

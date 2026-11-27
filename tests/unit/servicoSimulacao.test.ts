@@ -32,6 +32,7 @@ describe('ServicoSimulacao', () => {
       msAtivo: 3_600_000,
       abates: Math.round(sim.abatesH * 0.5),
       pokemon: { id: '1', speciesId: 4, level: 5 },
+      sazonal: { tipo: null, escudo: false },
     };
     const semPokemon: Sessao = { ...sessao, id: 'b', pokemon: undefined as never };
     delete (semPokemon as Partial<Sessao>).pokemon;
@@ -56,12 +57,63 @@ describe('ServicoSimulacao', () => {
       golpesDados: Math.round((sim.acoesPorAbateMedio * abates) / 4),
       fases: { lutaMs: 1_000_000, deslocamentoMs: 150_000, esperaMs: 80_000, ondas: 40 },
       pokemon: { id: '1', speciesId: 4, level: 5 },
+      sazonal: { tipo: null, escudo: false },
     };
     const c = servico.calibracao([sessao])!;
     expect(c.componentes?.fatorDano).toBeCloseTo(4, 1);
     expect(c.ajustes).toMatchObject({ deslocamentoPorAbateS: 1.5, esperaPorOndaS: 2 });
     const ajustado = servico.simuladorPara(estado.pokemonAtivo()!, c.ajustes)!(hunt)!;
     expect(ajustado.acoesPorAbateMedio).toBeLessThan(sim.acoesPorAbateMedio);
+  });
+
+  it('simula cada sessão no seu próprio dia sazonal', () => {
+    const FIM = 10 * 86_400_000;
+    const { servico, estado } = criar({ diaSazonal: { tipo: 'FIRE', fim: FIM } });
+    const hunt = estado.huntPorSlug('geodude')!;
+    const pk = estado.pokemonAtivo()!;
+    const semBonus = servico.simuladorPara(pk, { tipoSazonal: null })!(hunt)!;
+    const comFogo = servico.simuladorPara(pk)!(hunt)!;
+    expect(comFogo.acoesPorAbateMedio).toBeLessThan(semBonus.acoesPorAbateMedio);
+    const base = (inicio: number, extra: Partial<Sessao>): Sessao => ({
+      ...novaSessao('geodude', 'Geodude', inicio),
+      id: `s-${inicio}`,
+      msAtivo: 3_600_000,
+      abates: 100,
+      fases: { lutaMs: 1_000_000, deslocamentoMs: 100_000, esperaMs: 10_000, ondas: 10 },
+      pokemon: { id: '1', speciesId: 4, level: 5 },
+      ...extra,
+    });
+    const diaSemBonus = base(1_000, {
+      golpesDados: Math.round(semBonus.acoesPorAbateMedio * 100),
+      sazonal: { tipo: null, escudo: false },
+    });
+    const c = servico.calibracao([diaSemBonus])!;
+    expect(c.componentes?.fatorDano).toBeCloseTo(1, 1);
+
+    const deHojeSemRegistro = base(FIM - 1_000, {
+      golpesDados: Math.round(comFogo.acoesPorAbateMedio * 100),
+    });
+    const antigaSemRegistro = base(FIM - 3 * 86_400_000, { golpesDados: 1 });
+    const c2 = servico.calibracao([deHojeSemRegistro, antigaSemRegistro])!;
+    expect(c2.sessoes).toBe(1);
+    expect(c2.componentes?.fatorDano).toBeCloseTo(1, 1);
+  });
+
+  it('simula a sessão no nível médio entre o inicial e o final', () => {
+    const { servico, estado } = criar();
+    const hunt = estado.huntPorSlug('geodude')!;
+    const pk = estado.pokemonAtivo()!;
+    const nivelMedio = servico.simuladorPara({ ...pk, level: 9 })!(hunt)!;
+    const sessao: Sessao = {
+      ...novaSessao('geodude', 'Geodude', 0),
+      msAtivo: 3_600_000,
+      abates: 100,
+      golpesDados: Math.round(nivelMedio.acoesPorAbateMedio * 100),
+      fases: { lutaMs: 1_000_000, deslocamentoMs: 100_000, esperaMs: 10_000, ondas: 10 },
+      pokemon: { id: '1', speciesId: 4, level: 5, levelFinal: 13 },
+      sazonal: { tipo: null, escudo: false },
+    };
+    expect(servico.calibracao([sessao])?.componentes?.fatorDano).toBeCloseTo(1, 1);
   });
 
   it('analisa o time na hunt, do melhor para o pior XP/h', () => {

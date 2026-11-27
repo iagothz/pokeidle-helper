@@ -185,6 +185,54 @@ describe('Aplicacao: backup e importação', () => {
   });
 });
 
+describe('Aplicacao: carimbo do dia sazonal nas sessões de hoje', () => {
+  it('grava o dia de hoje nas sessões salvas de hoje sem registro, só uma vez', async () => {
+    const FIM = 10 * 86_400_000;
+    const deHoje = { ...novaSessao('bellsprout', 'Bellsprout', FIM - 5_000), aberta: false };
+    const deOntem = { ...novaSessao('oddish', 'Oddish', FIM - 2 * 86_400_000), aberta: false };
+    const salvas: Sessao[] = [];
+    const { log } = logDeTeste();
+    const { especies, itens } = catalogos();
+    const app = new Aplicacao({
+      config: CONFIG_PADRAO,
+      log,
+      estado: new EstadoJogo(log),
+      repositorio: {
+        salvar: async (s) => salvas.push(s),
+        listar: async () => [deHoje, deOntem],
+        limpar: async () => undefined,
+      },
+      especies,
+      itens,
+      versao: 'teste',
+    });
+    await app.carregarHistorico();
+    const env = (dados: unknown) => ({
+      origem: 'pokeidle-helper' as const,
+      v: 1 as const,
+      tipo: 'mensagem' as const,
+      recebidoEm: 0,
+      dados,
+    });
+    app.receber(
+      env({
+        t: 'welcome',
+        estado: {
+          nick: 'x',
+          level: 209,
+          diaSazonal: { tipo: 'FIRE', fim: FIM },
+          loja: { alvoAtrasados: 1296 },
+        },
+      }),
+    );
+    app.receber(env({ t: 'estado', estado: { gold: 1 } }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(salvas.map((s) => [s.huntSlug, s.sazonal])).toEqual([
+      ['bellsprout', { tipo: 'FIRE', escudo: true }],
+    ]);
+  });
+});
+
 describe('Aplicacao.carregarHistorico', () => {
   it('normaliza sessões salvas por versões anteriores', async () => {
     const antiga = {

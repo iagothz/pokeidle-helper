@@ -114,3 +114,17 @@ Intervalos acima da pausa máxima (60 s) são descartados. O dano de cada golpe 
 ## Dia sazonal (`shared/dia-sazonal.mjs`)
 
 `estado.diaSazonal.tipo` traz o tipo do dia. Dano = base × (atacante do tipo ? 2 : 1) ÷ (defensor do tipo ? 4 : 1). Com o Shield do Novato (`level < loja.alvoAtrasados`), os selvagens do tipo não recebem o bônus contra você.
+
+Cada sessão grava `sazonal: { tipo, escudo }` do momento em que começou, e a calibração simula cada sessão com o seu próprio dia. `diaSazonal.fim` marca o fim do dia corrente; sessões sem registro só são usadas se começaram nas 24 h anteriores a ele. Quando o dia muda com a sessão aberta, a sessão é encerrada e outra começa na mesma hunt, para que nenhuma sessão misture dois dias.
+
+## Coleta detalhada (sessão v5)
+
+Além dos totais, cada sessão guarda três listas (até 50 000 registros cada):
+
+| Campo           | Um registro por                              | Campos                                                                                                                                            |
+| --------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trechos`       | nível (ou pokémon) do ativo dentro da sessão | `inicio`, `fim`, `pokemonId`, `level`, `tipoSazonal`, `msAtivo`, `abates`, `golpesDados`, `danoCausado`, `xpPokemon`, `gold`, `desmaios`, `fases` |
+| `abatesDetalhe` | selvagem derrotado                           | `t` horário, `lv` nível do ativo, `g` golpes, `d` dano, `l` ms do 1º golpe à morte, `xp`, `o` ouro                                                |
+| `consumo`       | poção, revive, bola, captura ou desmaio      | `t` horário, `k` tipo (`pocao`, `revive`, `bola`, `captura`, `desmaio`), `id` do item, `shiny`                                                    |
+
+Golpes e dano de um abate são os seus `ataque` desde o abate anterior; com vários selvagens vivos ao mesmo tempo, a divisão entre eles é aproximada. O trecho em andamento entra nos checkpoints (a cada 30 s no navegador) e, com o backup automático ligado, a sessão aberta vai para o arquivo a cada 5 min.

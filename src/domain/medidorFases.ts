@@ -55,6 +55,14 @@ export class MedidorFases {
     return { ...this.fases };
   }
 
+  previa(agora: number): Fases {
+    const r = { ...this.fases };
+    if (!this.fase) return r;
+    const duracao = agora - this.desde;
+    if (duracao > 0) r[CHAVE[this.fase]] += Math.min(duracao, this.pausaMaximaMs);
+    return r;
+  }
+
   fechar(em: number): void {
     if (!this.fase) return;
     this.mudar(this.fase, em);

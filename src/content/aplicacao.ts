@@ -37,6 +37,7 @@ import {
 } from '../analysis/progressao';
 
 const AMOSTRA_RITMO_MS = 5 * 60_000;
+const DIA_MS = 86_400_000;
 const NOME_FRAGMENTO_OVO = 'Shiny Egg Fragment';
 
 export interface RepositorioSessoesPorta {
@@ -173,6 +174,7 @@ export class Aplicacao {
   private versaoJogo: string | null = null;
   private cacheTime: AnaliseTime | null = null;
   private readonly ativosLogados = new Set<string>();
+  private diaCarimbado: number | null = null;
   readonly simulacao: ServicoSimulacao;
   private readonly log: Logger;
 
@@ -225,7 +227,26 @@ export class Aplicacao {
     if (tipo === 'welcome') this.cacheRanking = null;
   }
 
+  private carimbarDiaSazonal() {
+    const fim = this.d.estado.fimDiaSazonal;
+    if (this.diaCarimbado === fim || fim === null) return;
+    this.diaCarimbado = fim;
+    const p = this.d.estado.parametrosCombate;
+    for (const s of this.sessoes.values()) {
+      if (s.sazonal || s.inicio < fim - DIA_MS || s.inicio >= fim) continue;
+      const carimbada = { ...s, sazonal: { tipo: p.tipoSazonal, escudo: p.escudoSazonal } };
+      this.sessoes.set(s.id, carimbada);
+      this.d.repositorio.salvar(carimbada).catch((erro: unknown) =>
+        this.log.warn('Falha ao gravar o dia sazonal na sessão', {
+          id: s.id,
+          ...erroParaCtx(erro),
+        }),
+      );
+    }
+  }
+
   private aoMudarEstado() {
+    this.carimbarDiaSazonal();
     const j = this.d.estado.jogador();
     if (j) {
       const slug = j.noCentro ? null : j.huntSlug;
@@ -237,6 +258,8 @@ export class Aplicacao {
   }
 
   private registrarPokemonAtivo() {
+    const p = this.d.estado.parametrosCombate;
+    this.rastreador.registrarSazonal({ tipo: p.tipoSazonal, escudo: p.escudoSazonal });
     const pk = this.d.estado.pokemonAtivo();
     if (!pk) return;
     if (!this.ativosLogados.has(String(pk.id))) {
@@ -278,7 +301,15 @@ export class Aplicacao {
               id: s.pokemon.id,
             }),
             ...(s.pokemon.speciesId !== undefined ? { speciesId: s.pokemon.speciesId } : {}),
-            ...(s.pokemon.level !== undefined ? { level: s.pokemon.level } : {}),
+            ...(s.pokemon.level !== undefined
+              ? {
+                  level: Math.round(
+                    (s.pokemon.level + (s.pokemon.levelFinal ?? s.pokemon.level)) / 2,
+                  ),
+                }
+              : {}),
+            stats: undefined,
+            maxHp: undefined,
           }
         : null;
       const simulado =
@@ -370,10 +401,14 @@ export class Aplicacao {
     };
   }
 
+  private sessaoAoVivo(): Sessao | null {
+    return this.rastreador.sessaoAoVivo((this.d.agora ?? Date.now)());
+  }
+
   private montarEconomiaAtual(): Economia | null {
     const estado = this.d.estado;
     const jogador = estado.jogador();
-    const atual = this.rastreador.sessaoAtual;
+    const atual = this.sessaoAoVivo();
     const hunt = estado.huntPorSlug(atual?.huntSlug ?? jogador?.huntSlug);
     if (!hunt || !jogador) return null;
     const taxas = atual && atual.msAtivo >= AMOSTRA_RITMO_MS ? taxasDe(atual, this.precos()) : null;
@@ -407,7 +442,7 @@ export class Aplicacao {
     const jogador = estado.jogador();
     if (!jogador) return null;
     const ativo = estado.pokemonAtivo() ?? null;
-    const atual = this.rastreador.sessaoAtual;
+    const atual = this.sessaoAoVivo();
     const taxas = atual && atual.msAtivo >= AMOSTRA_RITMO_MS ? taxasDe(atual, this.precos()) : null;
     const simulado = this.cacheTime?.linhas.find(
       (l) => ativo && String(l.pokemon.id) === String(ativo.id),
@@ -486,7 +521,7 @@ export class Aplicacao {
     const jogador = estado.jogador();
     const ativo = estado.pokemonAtivo() ?? null;
     const precos = this.precos();
-    const atual = this.rastreador.sessaoAtual;
+    const atual = this.sessaoAoVivo();
     if (estado.recebeuWelcome && !this.cacheRanking) this.recalcularAnalises(precos);
     const melhorSimulado = this.cacheTime?.linhas[0]?.pokemon ?? null;
     let sessao: ModeloSessao | null = null;

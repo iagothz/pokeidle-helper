@@ -126,8 +126,10 @@ describe('EstadoJogo', () => {
       },
     });
     expect(estado.parametrosCombate).toMatchObject({ tipoSazonal: 'FIRE', escudoSazonal: true });
+    expect(estado.fimDiaSazonal).toBe(123);
     estado.aplicarMensagem({ t: 'estado', estado: { level: 1300, diaSazonal: { tipo: 'XYZ' } } });
     expect(estado.parametrosCombate).toMatchObject({ tipoSazonal: null, escudoSazonal: false });
+    expect(estado.fimDiaSazonal).toBeNull();
   });
 
   it('aplica deltas de estado e notifica ouvintes', () => {

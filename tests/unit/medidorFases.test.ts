@@ -69,3 +69,20 @@ describe('MedidorFases.fechar', () => {
     expect(m.resultado().esperaMs).toBe(3_000);
   });
 });
+
+describe('MedidorFases.previa', () => {
+  it('soma a fase em andamento até agora, sem alterar a medição', () => {
+    const m = new MedidorFases(60_000);
+    m.registrar({ k: 'spawn' }, 0);
+    m.registrar({ k: 'ataque', por: 'jogador' }, 1_000);
+    m.registrar({ k: 'morte', quem: 'selvagem' }, 2_000);
+    expect(m.previa(7_000)).toMatchObject({
+      lutaMs: 1_000,
+      deslocamentoMs: 1_000,
+      esperaMs: 5_000,
+    });
+    expect(m.previa(500_000).esperaMs).toBe(60_000);
+    expect(m.resultado().esperaMs).toBe(0);
+    expect(new MedidorFases(60_000).previa(9)).toEqual(FASES_ZERADAS);
+  });
+});

@@ -185,6 +185,16 @@ describe('RastreadorSessao', () => {
     expect(r.sessaoAtual).toMatchObject({ capturas: 3, vendasAuto: 1500 });
   });
 
+  it('registra o dia sazonal visto no início da sessão', () => {
+    const { r } = criar();
+    r.registrarSazonal({ tipo: 'FIRE', escudo: true });
+    expect(r.sessaoAtual).toBeNull();
+    r.definirHunt('bellsprout', 'Bellsprout', 0);
+    r.registrarSazonal({ tipo: 'FIRE', escudo: true });
+    r.registrarSazonal({ tipo: 'FIRE', escudo: true });
+    expect(r.sessaoAtual?.sazonal).toEqual({ tipo: 'FIRE', escudo: true });
+  });
+
   it('registra o primeiro pokémon ativo visto na sessão', () => {
     const { r } = criar();
     r.registrarPokemon({ id: '9', speciesId: 4, level: 30 });
@@ -193,6 +203,16 @@ describe('RastreadorSessao', () => {
     r.registrarPokemon({ id: '9', speciesId: 4, level: 30 });
     r.registrarPokemon({ id: '10', speciesId: 7, level: 50 });
     expect(r.sessaoAtual?.pokemon).toEqual({ id: '9', speciesId: 4, level: 30 });
+  });
+
+  it('acompanha o nível final do mesmo pokémon ao longo da sessão', () => {
+    const { r } = criar();
+    r.definirHunt('bellsprout', 'Bellsprout', 0);
+    r.registrarPokemon({ id: '9', speciesId: 6, level: 207 });
+    r.registrarPokemon({ id: '9', speciesId: 6, level: 209 });
+    r.registrarPokemon({ id: '9', speciesId: 6, level: 211 });
+    r.registrarPokemon({ id: '10', speciesId: 7, level: 300 });
+    expect(r.sessaoAtual?.pokemon).toEqual({ id: '9', speciesId: 6, level: 207, levelFinal: 211 });
   });
 
   it('registra tokens gastos ao entrar num boss, como o jogo', () => {
@@ -257,5 +277,27 @@ describe('normalizarSessao', () => {
   it('mantém sessões atuais intactas', () => {
     const atual = { ...novaSessao('x', 'X', 5), golpesRecebidos: 7, tokens: { '70000': 2 } };
     expect(normalizarSessao(atual)).toEqual(atual);
+  });
+});
+
+describe('RastreadorSessao.sessaoAoVivo', () => {
+  it('conta o tempo desde o último evento até agora, com o teto da pausa', () => {
+    const { r } = criar({ pausaMaximaMs: 60_000 });
+    expect(r.sessaoAoVivo(0)).toBeNull();
+    r.definirHunt('bellsprout', 'Bellsprout', 0);
+    r.processarEventos([{ k: 'spawn', speciesId: 69 }], 0);
+    r.processarEventos([{ k: 'morte', quem: 'selvagem', xp: 8, ouro: 41, drops: [] }], 10_000);
+    expect(r.sessaoAtual?.msAtivo).toBe(10_000);
+    const vivo = r.sessaoAoVivo(25_000)!;
+    expect(vivo.msAtivo).toBe(25_000);
+    expect(vivo.fases.esperaMs).toBe(15_000);
+    expect(r.sessaoAoVivo(500_000)?.msAtivo).toBe(70_000);
+    expect(r.sessaoAtual?.msAtivo).toBe(10_000);
+  });
+
+  it('sem eventos de combate ainda, o tempo ao vivo é zero', () => {
+    const { r } = criar();
+    r.definirHunt('bellsprout', 'Bellsprout', 0);
+    expect(r.sessaoAoVivo(30_000)?.msAtivo).toBe(0);
   });
 });

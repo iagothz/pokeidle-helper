@@ -5,6 +5,35 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.9.0] - 2026-11-26
+
+### Adicionado
+
+- Coleta detalhada na sessão (formato v5): `trechos` por nível do pokémon (abates, golpes, dano, XP, gold, fases e tempo de cada nível), `abatesDetalhe` com golpes, dano, duração da luta, XP e ouro de cada abate, e `consumo` com horário de cada poção, revive, bola, captura e desmaio.
+- Log "Nível do pokémon mudou" com o resumo do nível que terminou, e `porNivel` no "Resumo da sessão".
+- Backup automático em arquivo a cada 5 min enquanto houver sessão aberta, para não perder uma madrugada se o navegador fechar.
+
+### Alterado
+
+- Quando o dia sazonal muda com a sessão aberta, a sessão é encerrada e outra começa na mesma hunt, para que nenhuma sessão misture dois dias na calibração.
+
+## [0.8.3] - 2026-11-26
+
+### Alterado
+
+- Sessão ao vivo: o tempo desde o último evento de combate (até a pausa máxima) entra no tempo ativo e na fase em andamento a cada segundo, então XP/h, gold/h e "Onde vai o tempo" caem em tempo real enquanto o pokémon anda ou espera onda.
+
+### Corrigido
+
+- A sessão guardava só o nível do pokémon no início; agora guarda também o nível final (`levelFinal`), e a calibração e o "Resumo da sessão" simulam no nível médio.
+
+## [0.8.2] - 2026-11-26
+
+### Corrigido
+
+- Calibração: cada sessão passa a ser simulada com o dia sazonal em que foi caçada (tipo do dia e Shield do Novato gravados na sessão). Antes, todas eram simuladas com o dia atual, e o fator de dano ficava ~2× errado quando o tipo do dia mudava.
+- Sessões antigas sem esse registro só entram na calibração se forem do dia atual; ao saber o dia, o helper grava o tipo de hoje nas sessões salvas de hoje para não perdê-las quando o dia virar.
+
 ## [0.8.1] - 2026-11-26
 
 ### Corrigido

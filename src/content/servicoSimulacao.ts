@@ -26,6 +26,13 @@ export interface AnaliseDeHunt extends AnaliseDoPokemon {
   nivel: number;
 }
 
+const DIA_MS = 86_400_000;
+
+function nivelMedio(inicial: number | undefined, final: number | undefined): number | undefined {
+  if (inicial === undefined) return final;
+  return final === undefined ? inicial : Math.round((inicial + final) / 2);
+}
+
 export type Simulador = (hunt: Hunt) => ResultadoSimulacao | null;
 
 export class ServicoSimulacao {
@@ -44,8 +51,8 @@ export class ServicoSimulacao {
 
   calibracao(sessoes: readonly Sessao[]): Calibracao | null {
     const casos = this.casosDeCalibracao(sessoes);
-    const amostrasComponentes = casos.flatMap(({ sessao, pokemon, hunt }) => {
-      const sim = this.simuladorPara(pokemon)?.(hunt);
+    const amostrasComponentes = casos.flatMap(({ sessao, pokemon, hunt, dia }) => {
+      const sim = this.simuladorPara(pokemon, dia)?.(hunt);
       if (!sim) return [];
       return [
         {
@@ -71,8 +78,8 @@ export class ServicoSimulacao {
         : {}),
     };
     const residual = calibrar(
-      casos.flatMap(({ sessao, pokemon, hunt }) => {
-        const sim = this.simuladorPara(pokemon, ajustes)?.(hunt);
+      casos.flatMap(({ sessao, pokemon, hunt, dia }) => {
+        const sim = this.simuladorPara(pokemon, { ...ajustes, ...dia })?.(hunt);
         return sim
           ? [{ abatesReais: sessao.abates, msAtivo: sessao.msAtivo, abatesHSimulado: sim.abatesH }]
           : [];
@@ -86,17 +93,27 @@ export class ServicoSimulacao {
     return sessoes.flatMap((sessao) => {
       const hunt = this.estado.huntPorSlug(sessao.huntSlug);
       const registro = sessao.pokemon;
-      if (!registro || !hunt) return [];
+      const dia = this.diaDaSessao(sessao);
+      if (!registro || !hunt || !dia) return [];
       const atual = pokemons.find((p) => String(p.id) === registro.id);
-      const mesmoNivel = atual?.level === registro.level;
+      const nivel = nivelMedio(registro.level, registro.levelFinal);
+      const mesmoNivel = atual?.level === nivel;
       const pokemon: PokemonJogador = {
         ...(atual ?? { id: registro.id }),
         ...(registro.speciesId !== undefined ? { speciesId: registro.speciesId } : {}),
-        ...(registro.level !== undefined ? { level: registro.level } : {}),
+        ...(nivel !== undefined ? { level: nivel } : {}),
         ...(mesmoNivel ? {} : { stats: undefined, maxHp: undefined }),
       };
-      return [{ sessao, pokemon, hunt }];
+      return [{ sessao, pokemon, hunt, dia }];
     });
+  }
+
+  private diaDaSessao(sessao: Sessao): Partial<ParametrosCombate> | null {
+    if (sessao.sazonal)
+      return { tipoSazonal: sessao.sazonal.tipo, escudoSazonal: sessao.sazonal.escudo };
+    const fim = this.estado.fimDiaSazonal;
+    const deHoje = fim !== null && sessao.inicio >= fim - DIA_MS && sessao.inicio < fim;
+    return deHoje ? {} : null;
   }
 
   melhoresHunts(
