@@ -4,6 +4,41 @@ import welcome from '../fixtures/welcome.json';
 import { logDeTeste } from '../helpers/log';
 
 describe('EstadoJogo', () => {
+  it('lê pokédex, automações nativas e VIP do jogador', () => {
+    const { log } = logDeTeste();
+    const estado = new EstadoJogo(log);
+    estado.aplicarMensagem({
+      t: 'welcome',
+      estado: {
+        cheio: true,
+        nick: 'a',
+        pokedex: { '1': { k: 3, c: 1 }, '4': { k: 9, c: 0 }, x: { c: 5 }, '7': 'lixo' },
+        automation: { autoBallSemParar: 1, autoRevive: true, ballIds: [1, '2', -3], hpLimiar: 0.4 },
+        loja: { vip: true },
+      },
+    });
+    const j = estado.jogador()!;
+    expect([...j.especiesCapturadas]).toEqual([1]);
+    expect(j.automacao).toMatchObject({
+      autoBallSemParar: false,
+      autoBallAteCapturar: false,
+      autoRevive: true,
+      ballIds: [1, 2],
+      hpLimiar: 0.4,
+    });
+    expect(j.vip).toBe(true);
+  });
+
+  it('usa padrões quando pokédex e automações não vieram', () => {
+    const { log } = logDeTeste();
+    const estado = new EstadoJogo(log);
+    estado.aplicarMensagem({ t: 'welcome', estado: { cheio: true, nick: 'a' } });
+    const j = estado.jogador()!;
+    expect(j.especiesCapturadas.size).toBe(0);
+    expect(j.automacao.autoBallAteCapturar).toBe(false);
+    expect(j.automacao.ballIds).toEqual([]);
+    expect(j.vip).toBe(false);
+  });
   it('lê o welcome: hunts válidas, tabela de tipos, bolas e jogador', () => {
     const { log, memoria } = logDeTeste();
     const estado = new EstadoJogo(log);

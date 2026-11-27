@@ -5,7 +5,7 @@ import type { Logger } from '../shared/logger';
 const esquemaEnvelope = z.object({
   origem: z.literal(ORIGEM_PONTE),
   v: z.literal(VERSAO_PONTE),
-  tipo: z.enum(['mensagem', 'diagnostico']),
+  tipo: z.enum(['mensagem', 'diagnostico', 'resultadoComando']),
   recebidoEm: z.number(),
   dados: z.unknown(),
 });

@@ -296,6 +296,10 @@ export class CatalogoItens {
     return this.itens.get(id);
   }
 
+  todos(): IterableIterator<Item> {
+    return this.itens.values();
+  }
+
   porNome(nome: string): Item | undefined {
     const alvo = nome.trim().toLowerCase();
     for (const item of this.itens.values()) if (item.name.toLowerCase() === alvo) return item;

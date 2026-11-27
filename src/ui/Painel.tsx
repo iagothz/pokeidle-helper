@@ -15,6 +15,7 @@ import { AbaEconomia } from './AbaEconomia';
 import { AbaSessao } from './AbaSessao';
 import { AbaProgresso } from './AbaProgresso';
 import { AbaTime } from './AbaTime';
+import { AbaAutomacao, usarModeloAutomacao, type AcoesAutomacao } from './AbaAutomacao';
 import { usarArraste } from './arraste';
 import { FiltrosContexto, usarFiltros } from './filtros';
 import { comSinal, curto, duracao, fracao, numero } from './formatar';
@@ -31,6 +32,7 @@ export interface AcoesPainel {
   salvarPreferencias(p: PreferenciasUi): void;
   fazerBackup(): Promise<RespostaBackup>;
   importarBackup(textos: string[]): Promise<ResultadoImportacao>;
+  automacao: AcoesAutomacao;
 }
 
 function textoImportacao(r: ResultadoImportacao): string {
@@ -124,6 +126,7 @@ const ABAS: readonly (readonly [Aba, string])[] = [
   ['economia', 'Economia'],
   ['hunts', 'Hunts'],
   ['historico', 'Histórico'],
+  ['automacao', 'Automação'],
   ['opcoes', 'Opções'],
 ];
 
@@ -170,7 +173,10 @@ function textoBonus(b: BonusAtivo): string {
   return 'mult' in b ? `${b.rotulo} ×${fracao(b.mult)}` : `${b.rotulo} +${fracao(b.pct)}%`;
 }
 
-function AbaHunts({ modelo }: { modelo: Modelo }) {
+function AbaHunts({ modelo, automacao }: { modelo: Modelo; automacao: AcoesAutomacao }) {
+  const auto = usarModeloAutomacao(automacao);
+  const prefsAuto = automacao.preferencias();
+  const clicavel = prefsAuto.ligada && prefsAuto.viagem;
   const { filtros, definir } = usarFiltros();
   const criterio: Criterio = filtros.huntsCriterio;
   const ocultarAltas = filtros.huntsAteNivelAtivo;
@@ -244,9 +250,23 @@ function AbaHunts({ modelo }: { modelo: Modelo }) {
         </thead>
         <tbody>
           {linhas.map((l) => (
-            <tr key={l.slug} class={modelo.sessao?.huntSlug === l.slug ? 'linha-atual' : ''}>
+            <tr
+              key={l.slug}
+              class={[
+                modelo.sessao?.huntSlug === l.slug ? 'linha-atual' : '',
+                auto.viagem?.alvo === l.slug ? 'linha-destino' : '',
+                clicavel ? 'linha-clicavel' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              title={clicavel ? 'Clique para viajar para esta hunt' : undefined}
+              onClick={clicavel ? () => automacao.viajar(l.slug) : undefined}
+            >
               <td>
                 {l.nome} <span class="muted">nv {numero(l.nivel)}</span>
+                {auto.viagem?.alvo === l.slug ? (
+                  <span class="selo-auto"> · indo ({numero(auto.viagem.tentativas)})</span>
+                ) : null}
                 <br />
                 <span class={`selo ${l.fonte}`}>{ROTULO_FONTE[l.fonte]}</span>
                 {l.melhorPokemon ? (
@@ -570,7 +590,11 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
             onMouseDown={(e) => iniciar(e, secao.current)}
           >
             <h1>PokeIdle Helper</h1>
-            <span class="muted">somente leitura</span>
+            {acoes.automacao.preferencias().ligada ? (
+              <span class="selo-auto">automação ligada</span>
+            ) : (
+              <span class="muted">somente leitura</span>
+            )}
             <button
               class="botao-janela"
               aria-label="Diminuir painel"
@@ -625,7 +649,8 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
                   </div>
                 ) : null}
                 {aba === 'sessao' ? <AbaSessao sessao={modelo.sessao} /> : null}
-                {aba === 'hunts' ? <AbaHunts modelo={modelo} /> : null}
+                {aba === 'hunts' ? <AbaHunts modelo={modelo} automacao={acoes.automacao} /> : null}
+                {aba === 'automacao' ? <AbaAutomacao acoes={acoes.automacao} /> : null}
                 {aba === 'time' ? <AbaTime app={app} modelo={modelo} /> : null}
                 {aba === 'progresso' ? <AbaProgresso modelo={modelo} /> : null}
                 {aba === 'economia' ? <AbaEconomia modelo={modelo} /> : null}
