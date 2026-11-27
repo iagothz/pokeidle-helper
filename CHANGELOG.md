@@ -5,6 +5,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.15.0] - 2026-11-27
+
 ### Adicionado
 
 - Aba **Automação**, com chave geral desligada por padrão e uma chave por automação:

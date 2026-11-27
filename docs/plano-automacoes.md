@@ -1,4 +1,4 @@
-# Automações (Não lançado)
+# Automações (0.15.0)
 
 Status: **implementado**, falta o teste manual no jogo. Referência das mensagens: [mensagens-cliente.md](mensagens-cliente.md).
 
