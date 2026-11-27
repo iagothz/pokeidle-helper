@@ -206,7 +206,12 @@ export const esquemasEvento = {
   capturado: z.object({
     k: z.literal('capturado'),
     pokemon: z
-      .object({ shiny: z.boolean().optional().catch(undefined) })
+      .object({
+        shiny: z.boolean().optional().catch(undefined),
+        speciesId: z.number().optional().catch(undefined),
+        level: z.number().optional().catch(undefined),
+        quality: z.number().optional().catch(undefined),
+      })
       .optional()
       .catch(undefined),
     vendidoAuto: numero.optional(),

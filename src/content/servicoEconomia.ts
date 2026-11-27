@@ -5,6 +5,8 @@ import {
   pedrasPorAbate,
   type CapturaDaEspecie,
 } from '../analysis/economia';
+import type { AnaliseAutocatch } from '../analysis/autocatch';
+import type { ChanceCalibrada } from '../analysis/calibracaoCaptura';
 import type { CatalogoEspecies } from '../domain/catalogo';
 import type { ParametrosCaptura } from '../domain/parametros';
 import type { Bola, Hunt } from '../domain/schemas';
@@ -27,6 +29,12 @@ export interface EntradaEconomia {
   fragmentosOvo: number;
 }
 
+export interface ChanceDaBola extends ChanceCalibrada {
+  bolaId: number;
+  nome: string;
+  preco: number;
+}
+
 export interface Economia {
   huntNome: string;
   abatesH: number;
@@ -36,6 +44,9 @@ export interface Economia {
   taxaRealCaptura: number | null;
   shiny: { arremessosPorShiny: number; msAteShiny: number | null } | null;
   pedrasH: { nome: string; porHora: number }[];
+  autocatch: AnaliseAutocatch | null;
+  chancesNaHunt: ChanceDaBola[];
+  fatorCaptura: { fator: number; capturas: number; esperadas: number } | null;
   ovoShiny: {
     chancePorAbate: number;
     fragmentos: number;
@@ -54,6 +65,9 @@ export function montarEconomia(e: EntradaEconomia): Economia {
   const ovosPorHora = e.abatesH * chanceOvo;
   return {
     huntNome: e.hunt.nome || e.hunt.slug,
+    autocatch: null,
+    chancesNaHunt: [],
+    fatorCaptura: null,
     abatesH: e.abatesH,
     fonteRitmo: e.fonteRitmo,
     capturas: analisarCaptura(e.hunt, e.especies, e.bolas, e.captura, e.todasHunts),
@@ -82,4 +96,19 @@ export function montarEconomia(e: EntradaEconomia): Economia {
           }
         : null,
   };
+}
+
+export function chanceMediaDaBola(
+  capturas: readonly CapturaDaEspecie[],
+  bolaId: number | null,
+): number | null {
+  let total = 0;
+  let peso = 0;
+  for (const c of capturas) {
+    const b = c.porBola.find((x) => x.bolaId === (bolaId ?? c.melhorBolaId));
+    if (!b) continue;
+    total += c.peso * b.chance;
+    peso += c.peso;
+  }
+  return peso > 0 ? total / peso : null;
 }

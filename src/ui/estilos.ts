@@ -24,6 +24,7 @@ export const ESTILOS = `
 .cabecalho h1 { font-size: 13px; margin: 0; font-weight: 800; letter-spacing: .2px; }
 .botao-janela { background: var(--fundo-3); color: var(--texto); border: 1px solid var(--linha); border-radius: 6px; width: 24px; height: 24px;
   cursor: pointer; font-weight: 700; line-height: 1; }
+.botao-janela:disabled { opacity: .35; cursor: default; }
 .abas { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px 0; }
 .abas button, .acao, .seg button { background: var(--fundo-2); color: var(--texto-2); border: 1px solid var(--linha); border-radius: 7px;
   padding: 5px 10px; cursor: pointer; font-size: 12px; font-weight: 600; }

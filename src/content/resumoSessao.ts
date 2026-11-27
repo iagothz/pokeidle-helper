@@ -1,4 +1,5 @@
 import type { Calibracao } from '../analysis/calibracao';
+import { ajustarCurvaNivel, resumirCurva } from '../analysis/curvaNivel';
 import type { Multiplicadores } from '../analysis/multiplicadores';
 import type { ResultadoSimulacao } from '../analysis/simulador';
 import type { Taxas } from '../analysis/taxas';
@@ -59,6 +60,7 @@ export function montarResumoSessao(e: EntradaResumo): Record<string, unknown> {
       lutaPorAbateS: porAbate(tr.fases.lutaMs / 1000, tr.abates),
       xpPokemonH: tr.msAtivo > 0 ? Math.round(tr.xpPokemon / (tr.msAtivo / 3_600_000)) : null,
     })),
+    curvaNivel: resumirCurva(ajustarCurvaNivel(s.trechos ?? [])),
     abatesDetalhados: s.abatesDetalhe?.length ?? 0,
     consumosDetalhados: s.consumo?.length ?? 0,
     simulado: e.simulado

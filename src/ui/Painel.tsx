@@ -5,12 +5,18 @@ import { ordenar, type Criterio, type LinhaRanking } from '../analysis/ranking';
 import type { BonusAtivo } from '../analysis/multiplicadores';
 import type { NivelLog } from '../shared/logger';
 import { NIVEIS } from '../shared/logger';
-import type { AbaPainel, PreferenciasUi } from '../shared/preferencias';
+import {
+  TAMANHOS_PAINEL,
+  type AbaPainel,
+  type FiltrosUi,
+  type PreferenciasUi,
+} from '../shared/preferencias';
 import { AbaEconomia } from './AbaEconomia';
 import { AbaSessao } from './AbaSessao';
 import { AbaProgresso } from './AbaProgresso';
 import { AbaTime } from './AbaTime';
 import { usarArraste } from './arraste';
+import { FiltrosContexto, usarFiltros } from './filtros';
 import { comSinal, curto, duracao, fracao, numero } from './formatar';
 import { notaGeral, notaSinal, notaPercentil } from './tons';
 import { Barra, Metrica, Ponto, SeloTipo, Valor } from './visual';
@@ -165,8 +171,11 @@ function textoBonus(b: BonusAtivo): string {
 }
 
 function AbaHunts({ modelo }: { modelo: Modelo }) {
-  const [criterio, definirCriterio] = useState<Criterio>('lucro');
-  const [ocultarAltas, definirOcultar] = useState(false);
+  const { filtros, definir } = usarFiltros();
+  const criterio: Criterio = filtros.huntsCriterio;
+  const ocultarAltas = filtros.huntsAteNivelAtivo;
+  const definirCriterio = (c: Criterio) => definir({ huntsCriterio: c });
+  const definirOcultar = (v: boolean) => definir({ huntsAteNivelAtivo: v });
   const ranking = modelo.ranking;
   if (!ranking) return <p class="muted">O ranking aparece depois do login no jogo.</p>;
   const limite = ocultarAltas && modelo.nivelAtivo !== null ? modelo.nivelAtivo : undefined;
@@ -389,7 +398,9 @@ function AbaOpcoes({
 }
 
 function AbaHistorico({ app }: { app: Aplicacao }) {
-  const [filtro, definirFiltro] = useState('');
+  const { filtros, definir } = usarFiltros();
+  const filtro = filtros.historicoHunt;
+  const definirFiltro = (slug: string) => definir({ historicoHunt: slug });
   const [limite, definirLimite] = useState(PAGINA_HISTORICO);
   const h = app.historico(filtro || undefined, limite);
   const restantes = h.total - h.linhas.length;
@@ -485,18 +496,31 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
   const [aberto, definirAberto] = useState(false);
   const [aba, definirAbaEstado] = useState<Aba>(inicial.aba);
   const [minimizado, definirMinimizadoEstado] = useState(inicial.minimizado);
+  const [tamanho, definirTamanhoEstado] = useState(inicial.tamanho);
   const [backupAutomatico, definirBackupAutomaticoEstado] = useState(inicial.backupAutomatico);
+  const [filtros, definirFiltrosEstado] = useState<FiltrosUi>(inicial.filtros);
   const preferencias = useRef<PreferenciasUi>(inicial);
   const secao = useRef<HTMLElement>(null);
   const salvar = (parcial: Partial<PreferenciasUi>) => {
     preferencias.current = { ...preferencias.current, ...parcial };
     acoes.salvarPreferencias(preferencias.current);
   };
+  const definirFiltros = (parcial: Partial<FiltrosUi>) => {
+    const novos = { ...preferencias.current.filtros, ...parcial };
+    definirFiltrosEstado(novos);
+    salvar({ filtros: novos });
+  };
   const { posicao, iniciar } = usarArraste(inicial.posicao, (p) => salvar({ posicao: p }));
   const definirAba = (a: Aba) => {
     definirAbaEstado(a);
     salvar({ aba: a });
   };
+  const definirTamanho = (t: number) => {
+    const limitado = Math.min(Math.max(0, t), TAMANHOS_PAINEL.length - 1);
+    definirTamanhoEstado(limitado);
+    salvar({ tamanho: limitado });
+  };
+  const dimensao = TAMANHOS_PAINEL[tamanho] ?? TAMANHOS_PAINEL[0];
   const definirMinimizado = (m: boolean) => {
     definirMinimizadoEstado(m);
     salvar({ minimizado: m });
@@ -516,11 +540,14 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
         }
       : null,
   );
-  const estiloPosicao = posicao
-    ? { left: `${posicao.x}px`, top: `${posicao.y}px`, right: 'auto', bottom: 'auto' }
-    : undefined;
+  const estiloPainel = {
+    ...(dimensao ? { width: `${dimensao.largura}px`, maxHeight: `${dimensao.alturaVh}vh` } : {}),
+    ...(posicao
+      ? { left: `${posicao.x}px`, top: `${posicao.y}px`, right: 'auto', bottom: 'auto' }
+      : {}),
+  };
   return (
-    <>
+    <FiltrosContexto.Provider value={{ filtros, definir: definirFiltros }}>
       <button
         class={`botao-flutuante${alerta ? ' alerta' : ''}`}
         title="PokeIdle Helper"
@@ -535,7 +562,7 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
           ref={secao}
           class={`painel${minimizado ? ' minimizado' : ''}`}
           aria-label="PokeIdle Helper"
-          style={estiloPosicao}
+          style={estiloPainel}
         >
           <div
             class="cabecalho"
@@ -544,6 +571,24 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
           >
             <h1>PokeIdle Helper</h1>
             <span class="muted">somente leitura</span>
+            <button
+              class="botao-janela"
+              aria-label="Diminuir painel"
+              title="Diminuir painel"
+              disabled={tamanho <= 0}
+              onClick={() => definirTamanho(tamanho - 1)}
+            >
+              ↙
+            </button>
+            <button
+              class="botao-janela"
+              aria-label="Aumentar painel"
+              title="Aumentar painel"
+              disabled={tamanho >= TAMANHOS_PAINEL.length - 1}
+              onClick={() => definirTamanho(tamanho + 1)}
+            >
+              ↗
+            </button>
             <button
               class="botao-janela"
               aria-label={minimizado ? 'Restaurar' : 'Minimizar'}
@@ -601,6 +646,6 @@ export function Painel({ app, acoes }: { app: Aplicacao; acoes: AcoesPainel }) {
           )}
         </section>
       ) : null}
-    </>
+    </FiltrosContexto.Provider>
   );
 }

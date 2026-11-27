@@ -3,7 +3,7 @@ import type { CatalogoEspecies, CatalogoItens } from '../domain/catalogo';
 import type { EstadoJogo } from '../domain/estadoJogo';
 import type { Fases } from '../domain/medidorFases';
 import { RastreadorSessao, normalizarSessao, type Sessao } from '../domain/sessao';
-import type { PokemonJogador } from '../domain/schemas';
+import type { Hunt, PokemonJogador } from '../domain/schemas';
 import {
   avaliarHunt,
   melhorDoTime,
@@ -13,9 +13,24 @@ import {
 } from '../analysis/dicasTipo';
 import { calcularAutonomia, type Autonomia } from '../analysis/autonomia';
 import { avaliarDanoRecebido, type AvaliacaoDano } from '../analysis/danoRecebido';
+import {
+  ajustarCurvaNivel,
+  projetarProgressao,
+  trechosDaHunt,
+  type CurvaNivel,
+  type Projecao,
+  type BonusNoTempo,
+} from '../analysis/curvaNivel';
 import { montarHistorico, type Historico } from '../analysis/historico';
 import { previsaoDeNivel, type PrevisaoNivel } from '../analysis/metas';
-import { calcularMultiplicadores } from '../analysis/multiplicadores';
+import {
+  FAIXA_NEUTRA,
+  calcularMultiplicadores,
+  faixaEm,
+  faixasDeBonus,
+  type BonusAtivo,
+  type Multiplicadores,
+} from '../analysis/multiplicadores';
 import { montarRanking, type ResultadoRanking } from '../analysis/ranking';
 import { agregar, taxasDe, type Precos, type Taxas } from '../analysis/taxas';
 import type { Config } from '../shared/config';
@@ -26,17 +41,43 @@ import type { Calibracao } from '../analysis/calibracao';
 import { ServicoSimulacao, type AnaliseDoPokemon } from './servicoSimulacao';
 import { dadosDeCombate, montarResumoSessao } from './resumoSessao';
 import { lerBackup, mesclarSessoes, montarBackup, type Backup } from '../domain/backup';
-import { xpDoNivel } from '../analysis/formulasJogo';
-import { montarEconomia, type Economia } from './servicoEconomia';
+import { analisarAutocatch, type AnaliseAutocatch } from '../analysis/autocatch';
 import {
+  amostrasDeCaptura,
+  calibrarChance,
+  fatorGlobalCaptura,
+} from '../analysis/calibracaoCaptura';
+import { analisarCaptura } from '../analysis/economia';
+import { ouroPorAbate, xpDoNivel } from '../analysis/formulasJogo';
+import {
+  chanceMediaDaBola,
+  montarEconomia,
+  type ChanceDaBola,
+  type Economia,
+} from './servicoEconomia';
+import {
+  FOLGA_NIVEL_POKEMON,
   custoRefino,
   pokemonsTravados,
   progressoEvolucao,
   type PokemonTravado,
   type ProgressoEvolucao,
+  type QuemGanhaXp,
+  type RitmoXp,
 } from '../analysis/progressao';
 
 const AMOSTRA_RITMO_MS = 5 * 60_000;
+const MS_HORA = 3_600_000;
+
+interface RitmosDeXp {
+  agora: number;
+  mult: Multiplicadores;
+  bonus: BonusNoTempo;
+  treinador: RitmoXp;
+  pokemon: RitmoXp;
+}
+
+const xpHAgora = (r: RitmoXp) => r.xpHBase * faixaEm(r.faixas, 0).faixa[r.quem];
 const DIA_MS = 86_400_000;
 const NOME_FRAGMENTO_OVO = 'Shiny Egg Fragment';
 
@@ -129,6 +170,18 @@ export interface ModeloProgresso {
   } | null;
   travados: PokemonTravado<PokemonJogador>[];
   ritmo: 'sessao' | 'simulado' | 'nenhum';
+  ritmoTreinador: RitmoXp;
+  ritmoPokemon: RitmoXp;
+  bonus: { agora: number; ativos: BonusAtivo[] };
+  curvaNivel: CurvaDaHunt | null;
+}
+
+export interface CurvaDaHunt {
+  huntNome: string;
+  tipoSazonal: string | null;
+  curva: CurvaNivel;
+  projecao: Projecao;
+  bonus: BonusNoTempo;
 }
 
 export interface ResultadoImportacao {
@@ -173,8 +226,13 @@ export class Aplicacao {
   private cacheRanking: ResultadoRanking | null = null;
   private versaoJogo: string | null = null;
   private cacheTime: AnaliseTime | null = null;
+  private analisesValidasAte = Infinity;
   private readonly ativosLogados = new Set<string>();
   private diaCarimbado: number | null = null;
+  private cacheFormulaCaptura: {
+    hunts: unknown;
+    valores: Map<string, number | null>;
+  } = { hunts: null, valores: new Map() };
   readonly simulacao: ServicoSimulacao;
   private readonly log: Logger;
 
@@ -369,9 +427,10 @@ export class Aplicacao {
     const pk = estado.jogador()?.pokemons.find((p) => String(p.id) === pokemonId);
     if (!pk) return [];
     const agora = (this.d.agora ?? Date.now)();
+    const nivelTreinador = estado.jogador()?.level;
     return this.simulacao.melhoresHunts(
       pk,
-      estado.hunts,
+      estado.hunts.filter((h) => nivelTreinador === undefined || h.nivel <= nivelTreinador),
       criterio,
       limite,
       this.cacheRanking?.calibracao ?? this.simulacao.calibracao([...this.sessoes.values()]),
@@ -415,7 +474,7 @@ export class Aplicacao {
     const ativoId = jogador.activeId;
     const simulado = this.cacheTime?.linhas.find((l) => String(l.pokemon.id) === ativoId);
     const idFragmento = this.d.itens.porNome(NOME_FRAGMENTO_OVO)?.id;
-    return montarEconomia({
+    const economia = montarEconomia({
       hunt,
       todasHunts: estado.hunts,
       especies: this.d.especies,
@@ -435,6 +494,92 @@ export class Aplicacao {
         : null,
       fragmentosOvo: idFragmento !== undefined ? (jogador.itens[String(idFragmento)] ?? 0) : 0,
     });
+    const calibracao = this.calibracaoCaptura(atual);
+    const fator = calibracao.fator.fator;
+    const chancesNaHunt: ChanceDaBola[] = [...estado.bolas.values()]
+      .filter((b) => (b.catchRate ?? 0) > 0)
+      .map((b) => ({
+        bolaId: b.id,
+        nome: b.name ?? b.nome ?? `Bola ${b.id}`,
+        preco: b.priceGold ?? 0,
+        ...calibrarChance(
+          chanceMediaDaBola(economia.capturas, b.id),
+          calibracao.amostras.find((a) => a.huntSlug === hunt.slug && a.bolaId === b.id),
+          fator,
+        ),
+      }));
+    const comCalibracao = { ...economia, chancesNaHunt, fatorCaptura: calibracao.fator };
+    return { ...comCalibracao, autocatch: this.autocatchDaHunt(hunt, atual, comCalibracao) };
+  }
+
+  private formulaDeCaptura(slug: string, bolaId: number): number | null {
+    const estado = this.d.estado;
+    if (this.cacheFormulaCaptura.hunts !== estado.hunts)
+      this.cacheFormulaCaptura = { hunts: estado.hunts, valores: new Map() };
+    const chave = `${slug}|${bolaId}`;
+    const valores = this.cacheFormulaCaptura.valores;
+    if (!valores.has(chave)) {
+      const hunt = estado.huntPorSlug(slug);
+      valores.set(
+        chave,
+        hunt
+          ? chanceMediaDaBola(
+              analisarCaptura(
+                hunt,
+                this.d.especies,
+                [...estado.bolas.values()],
+                estado.captura,
+                estado.hunts,
+              ),
+              bolaId,
+            )
+          : null,
+      );
+    }
+    return valores.get(chave) ?? null;
+  }
+
+  private calibracaoCaptura(atual: Sessao | null) {
+    const sessoes = [...this.sessoes.values()].filter((s) => s.id !== atual?.id);
+    if (atual) sessoes.push(atual);
+    const amostras = amostrasDeCaptura(sessoes);
+    return { amostras, fator: fatorGlobalCaptura(amostras, (h, b) => this.formulaDeCaptura(h, b)) };
+  }
+
+  private autocatchDaHunt(
+    hunt: Hunt,
+    atual: Sessao | null,
+    economia: Economia,
+  ): AnaliseAutocatch | null {
+    const estado = this.d.estado;
+    const jogador = estado.jogador();
+    const ativo = estado.pokemonAtivo();
+    const sessoes = [...this.sessoes.values()].filter(
+      (s) => s.huntSlug === hunt.slug && s.id !== atual?.id,
+    );
+    if (atual?.huntSlug === hunt.slug) sessoes.push(atual);
+    const curva = ativo ? this.curvaDaHunt(hunt, ativo, atual, jogador?.level) : null;
+    const abatesHSem = curva?.projecao.atual.abatesH ?? economia.abatesH;
+    if (!(abatesHSem > 0)) return null;
+    const agora = (this.d.agora ?? Date.now)();
+    const mult = calcularMultiplicadores({ agora, ...estado.bonus(agora) });
+    const usadas = new Map<number, number>();
+    for (const s of sessoes)
+      for (const [id, q] of Object.entries(s.bolas))
+        usadas.set(Number(id), (usadas.get(Number(id)) ?? 0) + q);
+    const maisUsada = [...usadas].toSorted((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    const precos = this.precos();
+    return analisarAutocatch({
+      sessoes,
+      precoBola: precos.bola,
+      xpPorAbate: curva?.curva.xpPorAbate ?? xpDoNivel(hunt.nivel) * mult.xpPokemon,
+      ouroPorAbate: curva?.curva.ouroPorAbate ?? ouroPorAbate(hunt.nivel, mult.bonusLootPct),
+      abatesHSem,
+      chanceCalibrada:
+        economia.chancesNaHunt.find((c) => c.bolaId === maisUsada)?.calibrada ??
+        chanceMediaDaBola(economia.capturas, maisUsada),
+      pokemonId: ativo ? String(ativo.id) : undefined,
+    });
   }
 
   private montarProgresso(): ModeloProgresso | null {
@@ -448,21 +593,24 @@ export class Aplicacao {
       (l) => ativo && String(l.pokemon.id) === String(ativo.id),
     );
     const ritmo = taxas ? 'sessao' : simulado ? 'simulado' : 'nenhum';
-    const xpTreinadorH = taxas?.xpTreinadorH ?? simulado?.xpTreinadorH ?? 0;
-    const xpPokemonH = taxas?.xpPokemonH ?? simulado?.xpPokemonH ?? 0;
     const hunt = estado.huntPorSlug(atual?.huntSlug ?? jogador.huntSlug);
+    const ritmos = this.ritmosDeXp(hunt, taxas?.abatesH ?? simulado?.abatesH ?? 0, {
+      xpTreinador: taxas?.xpTreinadorH ?? simulado?.xpTreinadorH ?? 0,
+      xpPokemon: taxas?.xpPokemonH ?? simulado?.xpPokemonH ?? 0,
+    });
+    const xpTreinadorH = xpHAgora(ritmos.treinador);
+    const xpPokemonH = xpHAgora(ritmos.pokemon);
     const especie = this.d.especies.obter(ativo?.speciesId);
-    const agora = (this.d.agora ?? Date.now)();
-    const xpPorAbate = hunt
-      ? xpDoNivel(hunt.nivel) * calcularMultiplicadores({ agora, ...estado.bonus(agora) }).xpPokemon
-      : 0;
+    const xpPorAbate = ritmos.bonus.xpBasePorAbate * ritmos.mult.xpPokemon;
     return {
       treinador: { level: jogador.level ?? null, xp: jogador.xp ?? null, xpH: xpTreinadorH },
       ativo: ativo
         ? {
             pokemon: ativo,
             xpH: xpPokemonH,
-            evolucao: especie ? progressoEvolucao(ativo, especie, xpPorAbate, xpPokemonH) : null,
+            evolucao: especie
+              ? progressoEvolucao(ativo, especie, xpPorAbate, ritmos.pokemon)
+              : null,
             refino: Object.entries(ativo.refino ?? {}).map(([stat, pontos]) => ({
               stat,
               pontos,
@@ -470,8 +618,63 @@ export class Aplicacao {
             })),
           }
         : null,
-      travados: pokemonsTravados(jogador.pokemons, jogador, xpTreinadorH),
+      travados: pokemonsTravados(jogador.pokemons, jogador, ritmos.treinador),
       ritmo,
+      ritmoTreinador: ritmos.treinador,
+      ritmoPokemon: ritmos.pokemon,
+      bonus: { agora: ritmos.agora, ativos: ritmos.mult.ativos },
+      curvaNivel: ativo && hunt ? this.curvaDaHunt(hunt, ativo, atual, jogador.level) : null,
+    };
+  }
+
+  private curvaDaHunt(
+    hunt: Hunt,
+    ativo: PokemonJogador,
+    atual: Sessao | null,
+    nivelTreinador: number | undefined,
+  ): CurvaDaHunt | null {
+    if (ativo.level === undefined) return null;
+    const tipoSazonal = this.d.estado.parametrosCombate.tipoSazonal ?? null;
+    const trechos = trechosDaHunt(this.sessoes.values(), atual, {
+      huntSlug: hunt.slug,
+      pokemonId: String(ativo.id),
+      tipoSazonal,
+    });
+    const ajustada = ajustarCurvaNivel(trechos);
+    if (!ajustada) return null;
+    const { bonus, mult } = this.ritmosDeXp(hunt, 0, { xpTreinador: 0, xpPokemon: 0 });
+    const curva = { ...ajustada, xpPorAbate: bonus.xpBasePorAbate * mult.xpPokemon };
+    const limite = nivelTreinador !== undefined ? nivelTreinador + FOLGA_NIVEL_POKEMON : null;
+    return {
+      huntNome: hunt.nome || hunt.slug,
+      tipoSazonal,
+      curva,
+      projecao: projetarProgressao(curva, { nivel: ativo.level, xp: ativo.xp }, limite, bonus),
+      bonus,
+    };
+  }
+
+  private ritmosDeXp(
+    hunt: Hunt | undefined,
+    abatesH: number,
+    medido: Record<QuemGanhaXp, number>,
+  ): RitmosDeXp {
+    const agora = (this.d.agora ?? Date.now)();
+    const entrada = { agora, ...this.d.estado.bonus(agora) };
+    const mult = calcularMultiplicadores(entrada);
+    const faixas = faixasDeBonus(entrada);
+    const xpBasePorAbate = hunt ? xpDoNivel(hunt.nivel) : 0;
+    const xpHBase = abatesH > 0 ? abatesH * xpBasePorAbate : 0;
+    const ritmo = (quem: QuemGanhaXp): RitmoXp =>
+      xpHBase > 0
+        ? { xpHBase, faixas, quem }
+        : { xpHBase: Math.max(0, medido[quem]), faixas: [FAIXA_NEUTRA], quem };
+    return {
+      agora,
+      mult,
+      bonus: { xpBasePorAbate, faixas },
+      treinador: ritmo('xpTreinador'),
+      pokemon: ritmo('xpPokemon'),
     };
   }
 
@@ -481,7 +684,9 @@ export class Aplicacao {
     const ativo = estado.pokemonAtivo();
     const agora = (this.d.agora ?? Date.now)();
     const sessoes = [...this.sessoes.values()];
-    const multiplicadores = calcularMultiplicadores({ agora, ...estado.bonus(agora) });
+    const entradaBonus = { agora, ...estado.bonus(agora) };
+    const multiplicadores = calcularMultiplicadores(entradaBonus);
+    this.analisesValidasAte = agora + (faixasDeBonus(entradaBonus)[0]?.horas ?? Infinity) * MS_HORA;
     const calibracao = this.simulacao.calibracao(sessoes);
     const simular = ativo ? this.simulacao.simuladorPara(ativo, calibracao?.ajustes) : null;
     this.cacheRanking = montarRanking({
@@ -522,6 +727,7 @@ export class Aplicacao {
     const ativo = estado.pokemonAtivo() ?? null;
     const precos = this.precos();
     const atual = this.sessaoAoVivo();
+    if ((this.d.agora ?? Date.now)() >= this.analisesValidasAte) this.cacheRanking = null;
     if (estado.recebeuWelcome && !this.cacheRanking) this.recalcularAnalises(precos);
     const melhorSimulado = this.cacheTime?.linhas[0]?.pokemon ?? null;
     let sessao: ModeloSessao | null = null;
@@ -549,6 +755,10 @@ export class Aplicacao {
           custo: preco(Number(id)) * qtd,
         }));
       const taxas = taxasDe(atual, precos);
+      const ritmos = this.ritmosDeXp(hunt, taxas.abatesH, {
+        xpTreinador: taxas.xpTreinadorH,
+        xpPokemon: taxas.xpPokemonH,
+      });
       sessao = {
         huntSlug: atual.huntSlug,
         huntNome: atual.huntNome,
@@ -559,8 +769,8 @@ export class Aplicacao {
         desmaios: atual.desmaios,
         xpPerdido: atual.xpPerdido,
         metas: {
-          treinador: previsaoDeNivel(jogador ?? undefined, taxas.xpTreinadorH),
-          pokemon: previsaoDeNivel(ativo ?? undefined, taxas.xpPokemonH),
+          treinador: previsaoDeNivel(jogador ?? undefined, ritmos.treinador),
+          pokemon: previsaoDeNivel(ativo ?? undefined, ritmos.pokemon),
         },
         consumidos: [
           ...consumidos(atual.pocoes, precos.item, (id) => this.d.itens.nome(id)),

@@ -5,6 +5,66 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [0.14.0] - 2026-11-27
+
+### Adicionado
+
+- O painel lembra os filtros entre uma visita e outra: ordenação e "até o nível do ativo" em Hunts, pokémon e critério do simulador em Time, hunt filtrada em Histórico e os níveis-alvo das metas em Progresso. Ficam junto das outras preferências do painel no armazenamento da extensão.
+
+### Corrigido
+
+- Teste da curva com boost dependia do relógio real e falhava de vez em quando; agora usa um relógio fixo.
+
+## [0.13.1] - 2026-11-27
+
+### Corrigido
+
+- O backup automático grava em silêncio: a barra de downloads do navegador fica escondida enquanto o arquivo é gravado e o download sai do histórico logo depois (o arquivo continua em Downloads). Pede a permissão `downloads.ui`, que o Chrome dá a partir da versão 115; nas anteriores o comportamento continua o de antes.
+
+## [0.13.0] - 2026-11-27
+
+### Corrigido
+
+- As projeções de nível acompanham os bônus de XP ativos. A curva da hunt usava o XP por abate do último trecho, com o bônus que estava ativo naquela época; agora usa o XP base da hunt vezes os bônus de cada momento, separados para treinador e pokémon.
+- Os tempos até o nível (metas, progressão por nível, evolução, pokémons travados e o próximo nível da sessão) contam o vencimento de cada bônus: o XP/h cai quando o VIP, um boost da loja ou o boost da guild acaba.
+- O XP/h do treinador e do ativo na aba Progresso é o ritmo de abates da sessão (ou o simulado) com os bônus de agora, e não mais a média da sessão, que misturava os períodos com e sem boost.
+- O ranking e a análise do time são recalculados quando um bônus vence.
+
+### Adicionado
+
+- Aba Progresso: linha com os bônus ativos e quanto falta para cada um vencer.
+
+## [0.12.0] - 2026-11-27
+
+### Adicionado
+
+- Aba Economia: "Chance real de captura nesta hunt", por bola, com a chance da fórmula, a medida nas suas sessões (com faixa de 95%) e a usada nas contas, que combina as duas e converge para a medida conforme a amostra cresce. Um fator global (capturas observadas ÷ esperadas pela fórmula em todas as hunts) corrige a fórmula onde ainda não há medida.
+- Aba Progresso: as metas de nível do treinador e do ativo usam a curva da hunt atual quando ela existe, com o XP/h mudando a cada nível do ativo e o ativo subindo junto com o treinador até treinador + 5.
+- Botões para aumentar e diminuir o painel (quatro tamanhos), salvos nas preferências.
+- `scripts/exportar-powerbi.mjs`: exporta o backup para CSVs em esquema estrela (sessões, trechos, abates, consumo, drops e dimensões de hunt, bola, item e tempo) para análise no Power BI; guia com relacionamentos, medidas DAX e páginas sugeridas em `docs/powerbi.md`.
+
+### Alterado
+
+- O autocatch usa a chance de captura calibrada para estimar bolas por captura.
+
+## [0.11.0] - 2026-11-27
+
+### Adicionado
+
+- Aba Economia: "Vale ligar o autocatch e vender?", com gold líquido por hora (vendas − bolas − gold dos abates perdidos) e a variação de XP/h. Usa bolas por captura e por abate medidas nas suas sessões da hunt (ou a fórmula do jogo até juntar 3 capturas), o gold médio da Auto Venda do Depot e o atraso por abate dos trechos com bola contra o ciclo sem bola do ativo. Diz o que ainda falta medir.
+- Cada captura na linha do tempo de consumo guarda espécie (`sp`), nível (`lv`), qualidade (`q`) e o gold da venda automática (`v`).
+
+## [0.10.0] - 2026-11-27
+
+### Adicionado
+
+- Aba Progresso: "Progressão por nível" do ativo na hunt atual, ajustada pelos trechos de todas as sessões do mesmo pokémon, hunt e dia sazonal. Mostra golpes por abate, abates/h e XP/h de agora, a fração do teto da hunt (1 golpe por abate) e, para os próximos níveis, golpes, XP/h, gold/h e tempo até chegar, parando no limite de treinador + 5.
+- `curvaNivel` no "Resumo da sessão" com os coeficientes do ajuste e o teto de abates/h.
+
+### Corrigido
+
+- Aba Time: "Melhores hunts" indicava hunts acima do nível do treinador; agora só lista hunts que você pode entrar.
+
 ## [0.9.0] - 2026-11-26
 
 ### Adicionado

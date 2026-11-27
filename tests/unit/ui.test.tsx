@@ -24,6 +24,47 @@ const env = (dados: unknown, recebidoEm: number) => {
   };
 };
 
+function sessaoComTrechos(): Sessao {
+  const trechos = [1, 2, 3, 4, 5].map((lv) => ({
+    inicio: lv * 1000,
+    fim: lv * 1000 + 999,
+    pokemonId: '1',
+    level: lv,
+    tipoSazonal: null,
+    msAtivo: 30 * (3_000 + 1_000 * (6 - lv)),
+    abates: 30,
+    golpesDados: 30 * (1 + 6 - lv),
+    danoCausado: 0,
+    xpPokemon: 30 * 10,
+    gold: 30 * 5,
+    desmaios: 0,
+    fases: { lutaMs: 0, deslocamentoMs: 0, esperaMs: 0, ondas: 0 },
+  }));
+  return {
+    ...novaSessao('bellsprout', 'Bellsprout', 0),
+    id: 'com-trechos',
+    msAtivo: 1_000_000,
+    abates: 150,
+    aberta: false,
+    trechos,
+  };
+}
+
+function sessaoComAutocatch(): Sessao {
+  const capturas = [1, 2, 3, 4].map((t) => ({ t, k: 'captura' as const, sp: 69, v: 900 }));
+  return {
+    ...novaSessao('bellsprout', 'Bellsprout', 0),
+    id: 'autocatch',
+    msAtivo: 600_000,
+    abates: 200,
+    aberta: false,
+    bolas: { '1': 100 },
+    capturas: 4,
+    vendasAuto: 3_600,
+    consumo: capturas,
+  };
+}
+
 function criarApp() {
   const { log } = logDeTeste();
   const { especies, itens } = catalogos();
@@ -288,6 +329,33 @@ describe('painel', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('aba Progresso: progressão por nível na hunt atual', async () => {
+    const app = criarApp();
+    const ui = montarInterface(document, app, acoesFalsas());
+    desmontar = ui.desmontar;
+    clicar(ui.raiz, 'PH');
+    await esperar(10);
+    await app.importarSessoes({ sessoes: [sessaoComTrechos()] });
+    app.receber(env(welcome, 0));
+    await esperar();
+    clicar(ui.raiz, 'Progresso');
+    await esperar(10);
+    const texto = ui.raiz.textContent ?? '';
+    expect(texto).toContain('Progressão por nível em Bellsprout');
+    expect(texto).toMatch(/Ajuste em 5 níveis \(nv 1–5, 150 abates\)/);
+    expect(texto).toMatch(/do teto/);
+    expect(texto).toContain('Limite atual: nv 9 (treinador + 5).');
+    expect(texto).toContain('Amostra pequena');
+    expect(texto).toContain('Tempo pela curva de Bellsprout');
+    const alvo = ui.raiz.querySelector(
+      'input[aria-label="Nível-alvo do ativo"]',
+    ) as HTMLInputElement;
+    alvo.value = '8';
+    alvo.dispatchEvent(new Event('input'));
+    await esperar(10);
+    expect(ui.raiz.textContent).toMatch(/faltam\s*[\d.]+ XP\s*~.*pela curva/);
+  });
+
   it('aba Progresso: meta de nível, evolução, travados e refino', async () => {
     const app = criarApp();
     const ui = montarInterface(document, app, acoesFalsas());
@@ -382,6 +450,28 @@ describe('painel', () => {
     expect(depois).toMatch(/^180\s?mil$/);
   });
 
+  it('aba Economia: veredito do autocatch com gold líquido e XP/h', async () => {
+    const app = criarApp();
+    const ui = montarInterface(document, app, acoesFalsas());
+    desmontar = ui.desmontar;
+    clicar(ui.raiz, 'PH');
+    await esperar(10);
+    await app.importarSessoes({ sessoes: [sessaoComAutocatch()] });
+    app.receber(env(welcome, 0));
+    await esperar();
+    clicar(ui.raiz, 'Economia');
+    await esperar(10);
+    const texto = ui.raiz.textContent ?? '';
+    expect(texto).toContain('Vale ligar o autocatch e vender?');
+    expect(texto).toMatch(/Gold líquido:\s*[+−-]?[\d.,]+/);
+    expect(texto).toMatch(/medido \(4 capturas em 100 bolas\)/);
+    expect(texto).toContain('média de 4 vendas automáticas');
+    expect(texto).toContain('atrasa os abates');
+    expect(texto).toContain('Chance real de captura nesta hunt');
+    expect(texto).toMatch(/4\s*\/\s*100/);
+    expect(texto).toMatch(/4 capturas contra [\d,]+ esperadas/);
+  });
+
   it('aba Economia: captura por bola, melhor bola, shiny e pedras', async () => {
     const app = criarApp();
     const ui = montarInterface(document, app, acoesFalsas());
@@ -465,6 +555,81 @@ describe('painel', () => {
     expect(ui.raiz.querySelectorAll('tbody tr')).toHaveLength(1);
   });
 
+  it('salva os filtros da aba Hunts e abre com eles', async () => {
+    const app = criarApp();
+    const acoes = acoesFalsas();
+    const ui = montarInterface(document, app, acoes);
+    desmontar = ui.desmontar;
+    clicar(ui.raiz, 'PH');
+    await esperar(10);
+    app.receber(env(welcome, 0));
+    await esperar();
+    clicar(ui.raiz, 'Hunts');
+    await esperar(10);
+    clicar(ui.raiz, 'XP/h');
+    await esperar(10);
+    (ui.raiz.querySelector('input[type="checkbox"]') as HTMLInputElement).click();
+    await esperar(10);
+    expect(acoes.salvarPreferencias).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filtros: expect.objectContaining({ huntsCriterio: 'xp', huntsAteNivelAtivo: true }),
+      }),
+    );
+    ui.desmontar();
+
+    const salvas = vi.mocked(acoes.salvarPreferencias).mock.lastCall![0];
+    const outra = montarInterface(document, app, acoesFalsas(salvas));
+    desmontar = outra.desmontar;
+    clicar(outra.raiz, 'PH');
+    await esperar(10);
+    const xp = [...outra.raiz.querySelectorAll('button')].find((b) => b.textContent === 'XP/h')!;
+    expect(xp.getAttribute('aria-pressed')).toBe('true');
+    expect((outra.raiz.querySelector('input[type="checkbox"]') as HTMLInputElement).checked).toBe(
+      true,
+    );
+  });
+
+  it('salva o filtro do Histórico e a meta de nível', async () => {
+    const app = criarApp();
+    const acoes = acoesFalsas({
+      ...PREFERENCIAS_PADRAO,
+      filtros: { ...PREFERENCIAS_PADRAO.filtros, historicoHunt: 'bellsprout' },
+    });
+    const ui = montarInterface(document, app, acoes);
+    desmontar = ui.desmontar;
+    clicar(ui.raiz, 'PH');
+    await esperar(10);
+    app.receber(env(welcome, 0));
+    for (const b of batalhas) app.receber(env({ t: 'batalha', ev: b.ev }, b.em));
+    app.receber(env({ t: 'estado', estado: { huntSlug: 'geodude' } }, 240_000));
+    await esperar();
+    clicar(ui.raiz, 'Histórico');
+    await esperar(10);
+    const select = ui.raiz.querySelector(
+      'select[aria-label="Filtrar por hunt"]',
+    ) as HTMLSelectElement;
+    expect(select.value).toBe('bellsprout');
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+    await esperar(10);
+    expect(acoes.salvarPreferencias).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filtros: expect.objectContaining({ historicoHunt: '' }) }),
+    );
+    clicar(ui.raiz, 'Progresso');
+    await esperar(10);
+    const alvo = ui.raiz.querySelector(
+      'input[aria-label="Nível-alvo do treinador"]',
+    ) as HTMLInputElement;
+    alvo.value = '10';
+    alvo.dispatchEvent(new Event('input'));
+    await esperar(10);
+    expect(acoes.salvarPreferencias).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filtros: expect.objectContaining({ metas: { Treinador: 10 } }),
+      }),
+    );
+  });
+
   it('filtra as hunts pelo nível do pokémon ativo no formato real do estado', async () => {
     const app = criarApp();
     const ui = montarInterface(document, app, acoesFalsas());
@@ -514,6 +679,11 @@ describe('painel', () => {
     expect(ui.raiz.textContent).toContain(
       'Estimativas com bônus ativos: VIP ×1,5 · boost loot ×1,5',
     );
+    clicar(ui.raiz, 'Progresso');
+    await esperar(10);
+    expect(ui.raiz.textContent).toMatch(
+      /Bônus ativos: VIP ×1,5 \(vence em [^)]+\) · boost loot ×1,5 \(vence em [^)]+\)\. Os tempos já contam o fim de cada bônus\./,
+    );
   });
 
   it('avisa quando o nível do ativo é desconhecido em vez de filtrar em silêncio', async () => {
@@ -554,6 +724,32 @@ describe('painel', () => {
     );
   });
 
+  it('aumenta e diminui o painel e salva o tamanho', async () => {
+    const app = criarApp();
+    const acoes = acoesFalsas({ ...PREFERENCIAS_PADRAO, tamanho: 1 });
+    const ui = montarInterface(document, app, acoes);
+    desmontar = ui.desmontar;
+    clicar(ui.raiz, 'PH');
+    await esperar(10);
+    const painel = () => ui.raiz.querySelector('section.painel') as HTMLElement;
+    const botao = (r: string) =>
+      ui.raiz.querySelector(`button[aria-label="${r}"]`) as HTMLButtonElement;
+    expect(painel().style.width).toBe('520px');
+    botao('Aumentar painel').click();
+    await esperar(10);
+    expect(painel().style.width).toBe('680px');
+    expect(painel().style.maxHeight).toBe('88vh');
+    expect(acoes.salvarPreferencias).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tamanho: 2 }),
+    );
+    botao('Diminuir painel').click();
+    await esperar(10);
+    botao('Diminuir painel').click();
+    await esperar(10);
+    expect(painel().style.width).toBe('400px');
+    expect(botao('Diminuir painel').disabled).toBe(true);
+  });
+
   it('arrasta o painel pelo cabeçalho e salva a posição', async () => {
     const app = criarApp();
     const acoes = acoesFalsas();
@@ -582,10 +778,9 @@ describe('painel', () => {
       document,
       app,
       acoesFalsas({
+        ...PREFERENCIAS_PADRAO,
         posicao: { x: 12, y: 34 },
-        minimizado: false,
         aba: 'opcoes',
-        backupAutomatico: true,
       }),
     );
     desmontar = ui.desmontar;
